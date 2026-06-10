@@ -42,9 +42,17 @@ export class CameraRig {
   }
 
   setHandedness(h: Handedness): void {
+    // Owner-playtest fix (M1): the camera sits PLATE-side of the batter —
+    // over his lead shoulder, nearly on the pitch line — so the ball flies
+    // essentially at the lens and the batter frames left (righty). The
+    // spec's "2 ft outside the back shoulder" read put the batter mid-frame
+    // and the pitch line off-axis.
     const batterX = h === 'R' ? 0.85 : -0.85;
-    const outside = h === 'R' ? 2.0 * FT_TO_M : -2.0 * FT_TO_M;
-    this.playBase.set(batterX + outside, 5.9 * FT_TO_M, -4.5 * FT_TO_M);
+    const towardPlate = h === 'R' ? -0.55 : 0.55;
+    // z = −1.0 m (≈3.6 ft behind the batter, not the spec's 4.5): on the
+    // pitch line the §4 distance lands the camera inside the backstop pad
+    // (8 ft wide, 4 ft behind the plate) — pulled forward to clear it.
+    this.playBase.set(batterX + towardPlate, 5.9 * FT_TO_M, -1.0);
   }
 
   /** 0.8 s eased dolly to a station (null station = the OTS play camera). */

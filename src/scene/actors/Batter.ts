@@ -233,9 +233,11 @@ export class Batter {
   // -- clips ------------------------------------------------------------------
 
   private buildClips(): Record<'idle' | 'load' | 'swing' | 'reaction', THREE.AnimationClip> {
-    // IDLE: bat resting up on the shoulder, slow breathing sway.
-    const idleA = mergePose({ hips: [0, -4, 0], batWrist: [-18, 0, 10] });
-    const idleB = mergePose({ hips: [0, -2, 0], spine: [6, 0, 0], batWrist: [-14, 0, 8], head: [-4, 16, 0] });
+    // IDLE: bat resting up over the rear shoulder, slow breathing sway.
+    // (Wrist angles solved numerically — bat dir ≈ (-0.30, 0.92, -0.25) in
+    // rig space: up, toward the catcher, behind the head plane.)
+    const idleA = mergePose({ hips: [0, -4, 0], batWrist: [-120, -30, -40] });
+    const idleB = mergePose({ hips: [0, -2, 0], spine: [6, 0, 0], batWrist: [-114, -28, -38], head: [-4, 16, 0] });
     const idle = clipFromPoses('idle', [
       { t: 0, pose: idleA },
       { t: 1.3, pose: idleB },
@@ -256,11 +258,11 @@ export class Batter {
       shinL: [22, 0, 0],
       thighR: [-16, 0, 9],
       shinR: [24, 0, 0],
-      batWrist: [-30, -16, 6],
+      batWrist: [-90, -40, -45], // cocked up BEHIND the head (solved: dir ≈ (-0.45, 0.79, -0.41))
     });
     const loadB = mergePose({
       ...loadA,
-      batWrist: [-38, -10, 12],
+      batWrist: [-97, -36, -42],
       chest: [8, -17, 0],
     });
     const load = clipFromPoses('load', [
@@ -275,7 +277,7 @@ export class Batter {
       ...loadA,
       hips: [0, -8, 0],
       thighL: [-22, 0, -9],
-      batWrist: [-26, -18, 4],
+      batWrist: [-70, -35, -30], // uncocking on the way to contact
     });
     const contact = mergePose({
       hips: [0, 38, 0],

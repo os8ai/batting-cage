@@ -88,6 +88,14 @@ Bundle: 810 kB / **244 kB gzip** (budget ≤ 1.5 MB gz). Runtime deps: `three` +
    changes; shimmer is a material-color wobble).
 7. **BOARD camera station** exists in `CageScene.stations` for M3's
    ceremonies but is not yet bound to input.
+8. **Owner-playtest fixes (post-exit):** (a) play camera moved PLATE-side of
+   the batter (x = batter ∓ 0.55 m), nearly on the pitch line, so the ball
+   flies at the lens and the batter frames left — the spec's "2 ft outside
+   the back shoulder" read put the pitch line off-axis; z pulled to −1.0 m
+   (≈3.6 ft behind the batter) because the §4 4.5 ft distance lands the
+   camera inside the backstop pad on the centerline. (b) Idle/load bat poses
+   re-solved (numeric grid-search over the joint chain) so the bat cocks up
+   BEHIND the head instead of crossing in front of the face.
 
 ## M0-DEBUG ledger (current)
 

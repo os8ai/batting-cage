@@ -7,6 +7,7 @@ import {
   SIM_DT,
   SPINUP_S,
   SWING_CONTACT_OFFSET_S,
+  TIERS,
 } from './constants';
 import { resolveContact } from './contact/contactModel';
 import { makeBall, stepBall } from './physics/ballistics';
@@ -15,19 +16,44 @@ import { pitchSolution } from './physics/pitchSchedule';
 import { contactState, projectCarryFt } from './physics/projection';
 import { cycleTimes, phaseAt, type CycleTimes } from './pitchCycle';
 import { pitchRng } from './rng';
+import { clubsEntered, medalsImplied, medalFor, unlocksAfter } from './rules/progression';
 import { createRound, isComplete, recordSwing, type Round } from './rules/round';
+import { bestCarryFt, bestEvMph, pointsFor, roundScore, totalCarryFt } from './rules/scoring';
 import type {
   BallState,
+  CareerSnapshot,
   DomainEvent,
   Handedness,
+  Medal,
   PitchPhase,
   SwingRecord,
+  TierCareer,
   TierMph,
 } from './types';
 
 export interface SimOptions {
   seed: number;
   handedness?: Handedness;
+  /**
+   * Prior career snapshot (§8 gating + ceremony baselines). Default: every
+   * tier unlocked with empty history — headless suites stay storage-free;
+   * the browser passes the persisted career (M3).
+   */
+  career?: CareerSnapshot;
+}
+
+function emptyTierCareer(): TierCareer {
+  return { pbs: { bestRoundScore: 0, longestCarryFt: 0, hardestEvMph: 0 }, medals: [], clubs: [] };
+}
+
+/** Deep-clone a snapshot into sim-owned mutable state. */
+function cloneCareer(c: CareerSnapshot): CareerSnapshot {
+  const tiers: Partial<Record<TierMph, TierCareer>> = {};
+  for (const t of TIERS) {
+    const src = c.tiers[t];
+    if (src) tiers[t] = { pbs: { ...src.pbs }, medals: [...src.medals], clubs: [...src.clubs] };
+  }
+  return { unlockedTiers: [...c.unlockedTiers], tiers };
 }
 
 interface PendingContact {
@@ -73,9 +99,27 @@ export class CageSim {
   /** Guard collisions apply to batted balls only (the pitch exits the guard). */
   private batted = false;
 
+  private career: CareerSnapshot;
+
   constructor(opts: SimOptions) {
     this.seed = opts.seed;
     this.handedness = opts.handedness ?? 'R';
+    this.career = cloneCareer(opts.career ?? { unlockedTiers: [...TIERS], tiers: {} });
+  }
+
+  /** Replace the career snapshot (e.g. after a save import). Idle only. */
+  setCareer(career: CareerSnapshot): boolean {
+    if (this.inRound) return false;
+    this.career = cloneCareer(career);
+    return true;
+  }
+
+  get unlockedTiers(): readonly TierMph[] {
+    return this.career.unlockedTiers;
+  }
+
+  isTierUnlocked(tier: TierMph): boolean {
+    return this.career.unlockedTiers.includes(tier);
   }
 
   onEvent(fn: (e: DomainEvent) => void): void {
@@ -110,8 +154,9 @@ export class CageSim {
     return this.round !== null && this.phase !== 'ROUND_END';
   }
 
+  /** §8 progression gate: locked tiers refuse selection. */
   selectTier(tier: TierMph): boolean {
-    if (this.inRound) return false;
+    if (this.inRound || !this.isTierUnlocked(tier)) return false;
     this.tier = tier;
     return true;
   }
@@ -204,6 +249,7 @@ export class CageSim {
       evMph: outcome.evMph,
       laDeg: outcome.laDeg,
       carryFt,
+      points: pointsFor(outcome.grade, carryFt),
     };
     this.judged = true;
     if (outcome.grade !== 'MISS') {
@@ -271,6 +317,7 @@ export class CageSim {
             evMph: null,
             laDeg: null,
             carryFt: null,
+            points: 0,
           };
           if (this.round) recordSwing(this.round, record);
           this.emit({ type: 'SWING_JUDGED', t: this.cycleStart + c.windowClose, record });
@@ -285,7 +332,7 @@ export class CageSim {
         if (this.round && isComplete(this.round)) {
           this.phase = 'ROUND_END';
           this.parkBall();
-          this.emit({ type: 'ROUND_END', t: this.cycleStart + c.next, tier: this.tier, records: this.round.records });
+          this.finishRound(this.cycleStart + c.next);
         } else {
           this.startPitch(this.cycleStart + c.next);
         }
@@ -295,6 +342,66 @@ export class CageSim {
     }
 
     this.stepBallPhysics();
+  }
+
+  /**
+   * §8 round summary + ceremonies, judged against the prior career snapshot
+   * and folded back in so a continuing session chains (unlock at 40 → 50 is
+   * selectable for the next token). Emission order is the §9 ceremony order:
+   * ROUND_END → NEW_PB* → CLUB_ENTERED* → MEDAL_EARNED → TIER_UNLOCKED*.
+   */
+  private finishRound(t: number): void {
+    const records = this.round!.records;
+    const tier = this.tier;
+    const prior = this.career.tiers[tier] ?? emptyTierCareer();
+
+    const score = roundScore(records);
+    const carryTotal = totalCarryFt(records);
+    const carryBest = bestCarryFt(records);
+    const evBest = bestEvMph(records);
+    const medal = medalFor(tier, score, carryTotal);
+    const newUnlocks = unlocksAfter(tier, medal, this.career.unlockedTiers);
+    const clubs = clubsEntered(carryBest, prior.clubs);
+
+    const pbs: Array<{ kind: 'SCORE' | 'CARRY' | 'EV'; value: number }> = [];
+    if (score > prior.pbs.bestRoundScore && score > 0) pbs.push({ kind: 'SCORE', value: score });
+    if (carryBest > prior.pbs.longestCarryFt && carryBest > 0) pbs.push({ kind: 'CARRY', value: carryBest });
+    if (evBest > prior.pbs.hardestEvMph && evBest > 0) pbs.push({ kind: 'EV', value: evBest });
+
+    const newMedals: Medal[] =
+      medal !== null ? medalsImplied(medal).filter((m) => !prior.medals.includes(m)) : [];
+
+    this.emit({
+      type: 'ROUND_END',
+      t,
+      tier,
+      round: this.roundCounter,
+      records,
+      score,
+      totalCarryFt: carryTotal,
+      medal,
+      newUnlocks,
+      clubs,
+      isPB: pbs.length > 0,
+    });
+    for (const pb of pbs) this.emit({ type: 'NEW_PB', t, tier, kind: pb.kind, value: pb.value });
+    for (const ft of clubs) this.emit({ type: 'CLUB_ENTERED', t, tier, ft });
+    // The stamp ceremony celebrates the round's headline medal when it's new.
+    if (medal !== null && !prior.medals.includes(medal)) this.emit({ type: 'MEDAL_EARNED', t, tier, medal });
+    for (const u of newUnlocks) this.emit({ type: 'TIER_UNLOCKED', t, tier: u });
+
+    // Fold the round back into the career snapshot.
+    const next: TierCareer = {
+      pbs: {
+        bestRoundScore: Math.max(prior.pbs.bestRoundScore, score),
+        longestCarryFt: Math.max(prior.pbs.longestCarryFt, carryBest),
+        hardestEvMph: Math.max(prior.pbs.hardestEvMph, evBest),
+      },
+      medals: [...prior.medals, ...newMedals],
+      clubs: [...prior.clubs, ...clubs],
+    };
+    this.career.tiers[tier] = next;
+    this.career.unlockedTiers.push(...newUnlocks);
   }
 
   private startPitch(feedAt: number): void {

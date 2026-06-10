@@ -8,6 +8,29 @@ export type Handedness = 'R' | 'L';
 
 export type Bat = 'WOOD' | 'METAL';
 
+export type Medal = 'bronze' | 'silver' | 'gold' | 'platinum';
+
+export type PbKind = 'SCORE' | 'CARRY' | 'EV';
+
+/** Per-tier career facts the sim needs to judge ceremonies (§8). */
+export interface TierCareer {
+  pbs: { bestRoundScore: number; longestCarryFt: number; hardestEvMph: number };
+  /** Medal levels earned at least once at this tier. */
+  medals: Medal[];
+  /** Distance clubs already entered at this tier, ft (§8). */
+  clubs: number[];
+}
+
+/**
+ * Prior career snapshot, passed INTO the sim (§Architecture: one-way flow —
+ * the sim never reads storage). Headless default: all tiers unlocked, empty
+ * history; the browser passes the persisted career.
+ */
+export interface CareerSnapshot {
+  unlockedTiers: TierMph[];
+  tiers: Partial<Record<TierMph, TierCareer>>;
+}
+
 /** Live ball state, SI units. Flat scalars — pooled, zero-alloc in the hot loop. */
 export interface BallState {
   px: number;
@@ -37,7 +60,7 @@ export interface PitchSolution {
   plateSpeedMph: number;
 }
 
-/** Structured per-pitch swing record (§What outputs; points field arrives in M3). */
+/** Structured per-pitch swing record (§What outputs). */
 export interface SwingRecord {
   pitch: number; // 1-based
   tier: TierMph;
@@ -49,6 +72,8 @@ export interface SwingRecord {
   laDeg: number | null;
   /** Projected open-field carry, whole feet. Null for FOUL/MISS/TAKE (§6: no distance). */
   carryFt: number | null;
+  /** §8 points: quality multiplier × carry; FOUL 25 flat; MISS/TAKE 0. */
+  points: number;
 }
 
 export type IgnoredPressReason = 'PRE_RELEASE' | 'LOCKOUT' | 'AFTER_WINDOW' | 'NO_PITCH';
@@ -83,7 +108,28 @@ export type DomainEvent =
   | ({ type: 'GUARD_HIT'; t: number } & ImpactInfo)
   | ({ type: 'BALL_BOUNCE'; t: number } & ImpactInfo)
   | { type: 'BALL_SETTLED'; t: number; px: number; py: number; pz: number }
-  | { type: 'ROUND_END'; t: number; tier: TierMph; records: SwingRecord[] };
+  | {
+      type: 'ROUND_END';
+      t: number;
+      tier: TierMph;
+      /** Sim-lifetime round counter (recorder idempotency key). */
+      round: number;
+      records: SwingRecord[];
+      /** §8 round summary, computed by the sim from the career snapshot. */
+      score: number;
+      totalCarryFt: number;
+      medal: Medal | null;
+      newUnlocks: TierMph[];
+      /** Distance clubs first entered this round, ft. */
+      clubs: number[];
+      isPB: boolean;
+    }
+  // Ceremony events (§9/§10) — emitted immediately after ROUND_END, in order:
+  // NEW_PB* → CLUB_ENTERED* → MEDAL_EARNED → TIER_UNLOCKED*.
+  | { type: 'NEW_PB'; t: number; tier: TierMph; kind: PbKind; value: number }
+  | { type: 'CLUB_ENTERED'; t: number; tier: TierMph; ft: number }
+  | { type: 'MEDAL_EARNED'; t: number; tier: TierMph; medal: Medal }
+  | { type: 'TIER_UNLOCKED'; t: number; tier: TierMph };
 
 export type PitchPhase =
   | 'IDLE'

@@ -173,7 +173,13 @@ export const MEDAL_THRESHOLDS: Record<
   90: { bronze: 2300, silver: 4200, gold: 6100, platinum: 7500, platinumCarryFt: 3600 },
 };
 
-export const DISTANCE_CLUBS_FT = [250, 300, 350, 400] as const;
+export const DISTANCE_CLUBS_FT: readonly number[] = [250, 300, 350, 400];
+
+/** Hard-hit threshold for the §What-8 aggregate: EV ≥ 95 mph. */
+export const HARD_HIT_EV_MPH = 95;
+
+/** Swing log FIFO cap (§Data model). */
+export const SWING_LOG_CAP = 10_000;
 
 // ---------------------------------------------------------------------------
 // Sim rates (SPEC §Architecture / §7).

@@ -15,6 +15,25 @@ function record(over: Partial<SwingRecord>): SwingRecord {
     evMph: 95,
     laDeg: 26,
     carryFt: 360,
+    points: 450,
+    ...over,
+  };
+}
+
+export function roundEnd(over: {
+  t: number;
+  tier: SwingRecord['tier'];
+  records: SwingRecord[];
+}): DomainEvent {
+  return {
+    type: 'ROUND_END',
+    round: 1,
+    score: over.records.reduce((s, r) => s + r.points, 0),
+    totalCarryFt: over.records.reduce((s, r) => s + (r.carryFt ?? 0), 0),
+    medal: null,
+    newUnlocks: [],
+    clubs: [],
+    isPB: false,
     ...over,
   };
 }
@@ -77,7 +96,7 @@ describe('board page machine', () => {
       record({ grade: 'MISS', carryFt: null }),
       record({ carryFt: 372 }),
     ];
-    m.handle({ type: 'ROUND_END', t: 80, tier: 60, records });
+    m.handle(roundEnd({ t: 80, tier: 60, records }));
     expect(m.page).toMatchObject({ kind: 'ROUND_OVER', contactCount: 2, bestCarryFt: 372 });
   });
 

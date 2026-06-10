@@ -84,6 +84,13 @@ describe('schema & codec', () => {
     expect(career.tiers[60]!.pbs.bestRoundScore).toBe(0);
   });
 
+  it('first-run boot defaults: 40 mph · righty · wood (§FTUE)', () => {
+    const save = createFreshSave(123, clock.nowISO());
+    expect(save.loadout).toEqual({ handedness: 'R', bat: 'WOOD', lastInitials: 'AAA', lastTier: 40 });
+    expect(save.settings.qualityPreset).toBeNull(); // auto-detect probe runs
+    expect(save.sessions).toHaveLength(0); // coach + first-run attract key off zero rounds
+  });
+
   it('swing tuples round-trip', () => {
     const rec = {
       pitch: 3,

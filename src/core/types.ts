@@ -53,6 +53,17 @@ export interface SwingRecord {
 
 export type IgnoredPressReason = 'PRE_RELEASE' | 'LOCKOUT' | 'AFTER_WINDOW' | 'NO_PITCH';
 
+/** Which net section caught the ball ('left' = +X, screen-left from the box). */
+export type NetPanel = 'far' | 'left' | 'right' | 'ceiling' | 'back';
+
+/** Impact payload (M2): contact position + ball speed at impact, pre-response. */
+export interface ImpactInfo {
+  px: number;
+  py: number;
+  pz: number;
+  speedMps: number;
+}
+
 export type DomainEvent =
   | { type: 'TOKEN'; t: number; tier: TierMph }
   | { type: 'FEED'; t: number; pitch: number }
@@ -66,9 +77,12 @@ export type DomainEvent =
   | { type: 'SWING_JUDGED'; t: number; record: SwingRecord }
   | { type: 'PRESS_IGNORED'; t: number; reason: IgnoredPressReason }
   | { type: 'CONTACT'; t: number; pitch: number; evMph: number; laDeg: number; carryFt: number | null }
-  | { type: 'NET_HIT'; t: number; speedMps: number }
-  | { type: 'BACKSTOP_HIT'; t: number; speedMps: number }
-  | { type: 'BALL_SETTLED'; t: number }
+  | ({ type: 'NET_HIT'; t: number; panel: NetPanel } & ImpactInfo)
+  | ({ type: 'BACKSTOP_HIT'; t: number } & ImpactInfo)
+  | ({ type: 'FRAME_HIT'; t: number } & ImpactInfo)
+  | ({ type: 'GUARD_HIT'; t: number } & ImpactInfo)
+  | ({ type: 'BALL_BOUNCE'; t: number } & ImpactInfo)
+  | { type: 'BALL_SETTLED'; t: number; px: number; py: number; pz: number }
   | { type: 'ROUND_END'; t: number; tier: TierMph; records: SwingRecord[] };
 
 export type PitchPhase =

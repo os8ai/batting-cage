@@ -67,6 +67,20 @@ export const SLEEP_SPEED_MPS = 0.3;
 export const TURF_ROLL_DECAY = 1.8; // s⁻¹ exponential horizontal decay while rolling
 export const SETTLED_POOL = 12;
 
+// Steel-frame uprights (§4: every 10 ft along both side nets) — narrow
+// cylinder colliders, so a clang is rare by design (M2-PLAN §4 P0).
+export const FRAME_RADIUS_M = 0.032;
+export const FRAME_FIRST_Z_M = -8.0 * FT_TO_M;
+export const FRAME_SPACING_M = 10.0 * FT_TO_M;
+export const FRAME_LAST_Z_M = 62.0 * FT_TO_M;
+// Machine guard AABB (§4 steel mesh guard; matches the M1 prop: 0.75 m half
+// extent around the machine body, posts to 1.9 m). Active for batted balls
+// only — the pitched ball exits through the guard's aperture.
+export const GUARD_HALF_XZ_M = 0.75;
+export const GUARD_TOP_M = 1.9;
+/** Turf bounces below this vertical impact speed stay silent (no BALL_BOUNCE). */
+export const BOUNCE_EVENT_MIN_VY_MPS = 2.0;
+
 // ---------------------------------------------------------------------------
 // The pitch clock (SPEC §5): one fixed 7.5 s cycle, every tier, no jitter.
 // ---------------------------------------------------------------------------

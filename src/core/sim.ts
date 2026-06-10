@@ -9,8 +9,8 @@ import {
   SWING_CONTACT_OFFSET_S,
 } from './constants';
 import { resolveContact } from './contact/contactModel';
-import { ballSpeed, makeBall, stepBall } from './physics/ballistics';
-import { resolveCageCollisions, type CollisionEvent } from './physics/collision';
+import { makeBall, stepBall } from './physics/ballistics';
+import { resolveCageCollisions, separateSettled, type CollisionHit } from './physics/collision';
 import { pitchSolution } from './physics/pitchSchedule';
 import { contactState, projectCarryFt } from './physics/projection';
 import { cycleTimes, phaseAt, type CycleTimes } from './pitchCycle';
@@ -69,7 +69,9 @@ export class CageSim {
   readonly settled: BallState[] = [];
 
   private listeners: Array<(e: DomainEvent) => void> = [];
-  private collisionScratch: CollisionEvent[] = [];
+  private collisionScratch: CollisionHit[] = [];
+  /** Guard collisions apply to batted balls only (the pitch exits the guard). */
+  private batted = false;
 
   constructor(opts: SimOptions) {
     this.seed = opts.seed;
@@ -244,6 +246,7 @@ export class CageSim {
         const pc = this.pendingContact;
         this.pendingContact = null;
         contactState(pc.evMph, pc.laDeg, pc.sprayDeg, this.handedness, this.ball);
+        this.batted = true;
         this.emit({ type: 'CONTACT', t: pc.t, pitch: pc.pitch, evMph: pc.evMph, laDeg: pc.laDeg, carryFt: pc.carryFt });
       }
 
@@ -313,6 +316,9 @@ export class CageSim {
       this.settled.push(b);
       if (this.settled.length > SETTLED_POOL) this.settled.shift();
       this.ball.active = false;
+      // Relax the pile to convergence so the newcomer never interpenetrates
+      // (§7 nudges; tight clusters need a handful of passes, capped).
+      for (let i = 0; i < 40 && separateSettled(this.settled, null); i++);
     }
   }
 
@@ -331,23 +337,36 @@ export class CageSim {
     b.spinRadS = 0; // machine pitch: gravity + drag only (§7)
     b.asleep = false;
     b.active = true;
+    this.batted = false;
   }
 
   private stepBallPhysics(): void {
     const b = this.ball;
     if (!b.active || b.asleep) return;
     stepBall(b, SIM_DT);
-    const events = this.collisionScratch;
-    events.length = 0;
-    resolveCageCollisions(b, SIM_DT, events);
-    for (const e of events) {
-      if (e === 'NET_HIT') this.emit({ type: 'NET_HIT', t: this.t, speedMps: ballSpeed(b) });
-      else if (e === 'BACKSTOP_HIT') this.emit({ type: 'BACKSTOP_HIT', t: this.t, speedMps: ballSpeed(b) });
-      else if (e === 'SETTLED') {
-        this.emit({ type: 'BALL_SETTLED', t: this.t });
+    const hits = this.collisionScratch;
+    hits.length = 0;
+    resolveCageCollisions(b, SIM_DT, hits, this.batted);
+    for (const h of hits) {
+      // Payloads read the ball at emission: post-clamp position = the contact
+      // point; speedMps captured by the resolver at impact, pre-response.
+      if (h.kind === 'NET_HIT') {
+        this.emit({ type: 'NET_HIT', t: this.t, px: b.px, py: b.py, pz: b.pz, speedMps: h.speedMps, panel: h.panel! });
+      } else if (h.kind === 'BACKSTOP_HIT') {
+        this.emit({ type: 'BACKSTOP_HIT', t: this.t, px: b.px, py: b.py, pz: b.pz, speedMps: h.speedMps });
+      } else if (h.kind === 'FRAME_HIT') {
+        this.emit({ type: 'FRAME_HIT', t: this.t, px: b.px, py: b.py, pz: b.pz, speedMps: h.speedMps });
+      } else if (h.kind === 'GUARD_HIT') {
+        this.emit({ type: 'GUARD_HIT', t: this.t, px: b.px, py: b.py, pz: b.pz, speedMps: h.speedMps });
+      } else if (h.kind === 'BALL_BOUNCE') {
+        this.emit({ type: 'BALL_BOUNCE', t: this.t, px: b.px, py: b.py, pz: b.pz, speedMps: h.speedMps });
+      } else if (h.kind === 'SETTLED') {
+        this.emit({ type: 'BALL_SETTLED', t: this.t, px: b.px, py: b.py, pz: b.pz });
         this.parkBall();
       }
     }
+    // §7 settled-pile response: the rolling ball shoves the pile, pairs relax.
+    if (this.settled.length > 0) separateSettled(this.settled, b.active && !b.asleep ? b : null);
   }
 
   // -------------------------------------------------------------------------

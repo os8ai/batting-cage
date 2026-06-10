@@ -95,7 +95,7 @@ export const CLOTH_NODE_PITCH_M = 0.35; // wall panels (§11 "node pitch ~0.35 m
 export const CLOTH_CEILING_PITCH_M = 0.5; // ceiling strip, coarser
 /** Injected node velocity is clamped so a 102 EV rope deforms ~0.5–0.7 m
  * without tunneling (M2-PLAN §3.4; solver proven stable at 50 m/s headless). */
-export const CLOTH_IMPULSE_MAX_MPS = 34;
+export const CLOTH_IMPULSE_MAX_MPS = 40;
 /** settleEnergy below this = panel at rest (normals recompute can skip). */
 export const CLOTH_REST_ENERGY = 2e-5;
 

@@ -13,8 +13,9 @@ import type { CageSim } from '../core/sim';
 import type { Handedness } from '../core/types';
 import { Batter } from './actors/Batter';
 import { Machine } from './actors/Machine';
+import { Net } from './actors/Net';
 import { Lighting } from './Lighting';
-import { concreteTexture, netTexture, padTexture, plateMatTexture, steelTexture, turfTexture } from './textures';
+import { concreteTexture, padTexture, plateMatTexture, steelTexture, turfTexture } from './textures';
 import { LedBoard } from '../ui/diegetic/LedBoard';
 import { MachinePanel } from '../ui/diegetic/MachinePanel';
 import { StatsMonitor } from '../ui/diegetic/StatsMonitor';
@@ -38,6 +39,7 @@ export class CageScene {
   readonly scene = new THREE.Scene();
   readonly machine = new Machine();
   readonly batter = new Batter();
+  readonly net = new Net();
   readonly board = new LedBoard();
   readonly panel = new MachinePanel();
   readonly monitor = new StatsMonitor();
@@ -50,14 +52,11 @@ export class CageScene {
   private ballShadow: THREE.Mesh;
   private settledBalls: THREE.Mesh[] = [];
   private focusRing: THREE.Mesh;
-  private netBlip: THREE.Sprite;
-  private netBlipAge = -1;
   private trail: THREE.Points;
   private trailAges: Float32Array;
   private trailCursor = 0;
   private trailOn = false;
   private rackBats: Record<'WOOD' | 'METAL', THREE.Object3D>;
-  private netUniforms = { uTime: { value: 0 } };
 
   // Previous/current tick ball position for interpolated rendering.
   private prev = new THREE.Vector3();
@@ -78,6 +77,7 @@ export class CageScene {
     // Actors & diegetic surfaces.
     this.scene.add(this.machine.group);
     this.scene.add(this.batter.group);
+    this.scene.add(this.net.group);
     this.board.placeAt(75.5 * FT_TO_M);
     this.scene.add(this.board.group);
     this.panel.group.position.set(-1.55, 0, 1.15);
@@ -115,25 +115,6 @@ export class CageScene {
       this.scene.add(m);
       this.settledBalls.push(m);
     }
-
-    // Net-impact blip: a brief soft flash at NET_HIT so ceiling/side catches
-    // read from the play camera (placeholder until M2's cloth reaction —
-    // owner playtest: an unseen ceiling catch looks like a ground bounce).
-    const blipCanvas = document.createElement('canvas');
-    blipCanvas.width = blipCanvas.height = 64;
-    const bctx = blipCanvas.getContext('2d')!;
-    const bg = bctx.createRadialGradient(32, 32, 2, 32, 32, 32);
-    bg.addColorStop(0, 'rgba(255,240,200,0.9)');
-    bg.addColorStop(0.4, 'rgba(255,220,150,0.35)');
-    bg.addColorStop(1, 'rgba(255,200,120,0)');
-    bctx.fillStyle = bg;
-    bctx.fillRect(0, 0, 64, 64);
-    const blipTex = new THREE.CanvasTexture(blipCanvas);
-    this.netBlip = new THREE.Sprite(
-      new THREE.SpriteMaterial({ map: blipTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending })
-    );
-    this.netBlip.visible = false;
-    this.scene.add(this.netBlip);
 
     // Batted-ball tracer: a short-lived additive point trail so the launch
     // arc reads against the dark facility (owner playtest: the rise to the
@@ -409,50 +390,8 @@ export class CageScene {
     frame.castShadow = true;
     this.scene.add(frame);
 
-    // Netting: alpha-tested weave with a subtle vertex sway (§11). ONE shared
-    // material/texture for every panel (weave density baked into each plane's
-    // UVs) — six panels, one material, no texture clones. Sized so M2's
-    // Verlet panels can replace sections without re-modeling.
-    const netMat = new THREE.MeshStandardMaterial({
-      map: netTexture(),
-      alphaTest: 0.35,
-      side: THREE.DoubleSide,
-      roughness: 0.9,
-      color: 0x8a8a8e,
-    });
-    netMat.onBeforeCompile = (shader) => {
-      shader.uniforms.uTime = this.netUniforms.uTime;
-      shader.vertexShader =
-        'uniform float uTime;\n' +
-        shader.vertexShader.replace(
-          '#include <begin_vertex>',
-          '#include <begin_vertex>\n' +
-            'transformed += normal * 0.02 * sin(uTime * 0.7 + position.x * 1.3 + position.y * 0.9 + position.z * 0.6);'
-        );
-    };
-
-    const addNet = (w: number, h: number, pos: [number, number, number], rotY: number, rotX = 0): void => {
-      const geo = new THREE.PlaneGeometry(w, h, 8, 4);
-      // Bake the weave repeat (one cell ≈ 1.75 in) into the UVs.
-      const uv = geo.attributes.uv as THREE.BufferAttribute;
-      for (let i = 0; i < uv.count; i++) {
-        uv.setXY(i, uv.getX(i) * (w / 0.0445), uv.getY(i) * (h / 0.0445));
-      }
-      const mesh = new THREE.Mesh(geo, netMat);
-      mesh.position.set(...pos);
-      mesh.rotation.y = rotY;
-      mesh.rotation.x = rotX;
-      this.scene.add(mesh);
-    };
-
-    const midY = CAGE_HEIGHT_M / 2;
-    addNet(cageLen, CAGE_HEIGHT_M, [-CAGE_HALF_WIDTH_M, midY, cageMidZ], Math.PI / 2);
-    addNet(cageLen, CAGE_HEIGHT_M, [CAGE_HALF_WIDTH_M, midY, cageMidZ], -Math.PI / 2);
-    addNet(CAGE_HALF_WIDTH_M * 2, CAGE_HEIGHT_M, [0, midY, CAGE_FAR_Z_M], Math.PI);
-    addNet(CAGE_HALF_WIDTH_M * 2, CAGE_HEIGHT_M, [0, midY, CAGE_BACK_Z_M], 0);
-    addNet(CAGE_HALF_WIDTH_M * 2, cageLen, [0, CAGE_HEIGHT_M, cageMidZ], 0, -Math.PI / 2);
-    // Door flap near the plate end (-x side), slightly ajar.
-    addNet(0.9, 2.1, [-CAGE_HALF_WIDTH_M + 0.12, 1.05, 0.9], Math.PI / 2 + 0.18);
+    // Netting lives in the Net actor (M2): four §11 Verlet panels + the back
+    // panel react to impacts; the remaining sections keep the sway shader.
   }
 
   private buildPlateArea(): void {
@@ -545,13 +484,6 @@ export class CageScene {
     if (!on) this.trailAges.fill(1);
   }
 
-  /** NET_HIT cue — flash at the ball's current render position. */
-  flashNetHit(): void {
-    this.netBlip.position.copy(this.ball.position);
-    this.netBlipAge = 0;
-    this.netBlip.visible = true;
-  }
-
   showFocus(at: THREE.Vector3 | null): void {
     if (at) {
       this.focusRing.position.set(at.x, at.y, at.z);
@@ -613,25 +545,12 @@ export class CageScene {
 
     this.machine.update(sim);
     this.batter.update(dt);
+    this.net.update(dt, timeS);
     this.board.update(timeS);
     this.panel.update(timeS);
     this.lighting.update(dt, timeS);
-    this.netUniforms.uTime.value = timeS;
     if (this.focusRing.visible) {
       (this.focusRing.material as THREE.MeshBasicMaterial).opacity = 0.45 + 0.25 * Math.sin(timeS * 5);
-    }
-
-    if (this.netBlipAge >= 0) {
-      this.netBlipAge += dt;
-      const life = 0.35;
-      if (this.netBlipAge >= life) {
-        this.netBlipAge = -1;
-        this.netBlip.visible = false;
-      } else {
-        const k = this.netBlipAge / life;
-        this.netBlip.scale.setScalar(0.25 + k * 0.9);
-        this.netBlip.material.opacity = 1 - k;
-      }
     }
   }
 }

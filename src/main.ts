@@ -51,13 +51,13 @@ bus.subscribe((e) => {
   cage.board.onEvent(e);
   cage.machine.onEvent(e);
   cage.batter.onEvent(e);
+  cage.net.onEvent(e);
   hud.onEvent(e);
   for (const trig of cuesForEvent(e, cueCtx)) audio.trigger(trig, sim.currentTier);
   if (e.type === 'CONTACT') {
     rig.onContact(e.evMph, cueCtx.lastGrade ?? 'GOOD');
     cage.setBattedTrail(true);
   }
-  if (e.type === 'NET_HIT') cage.flashNetHit();
   if (e.type === 'FEED' || e.type === 'BALL_SETTLED' || e.type === 'ROUND_END') cage.setBattedTrail(false);
   if (e.type === 'TOKEN') goToStation('PLAY');
 });
@@ -201,7 +201,7 @@ window.addEventListener('resize', () => {
 
 // Dev/CI hook (?dev=1): exposes the sim + loop for the scripted smoke run.
 if (new URLSearchParams(window.location.search).has('dev')) {
-  (window as unknown as Record<string, unknown>).__bc = { sim, loop, rig, cage };
+  (window as unknown as Record<string, unknown>).__bc = { sim, loop, rig, cage, renderer };
 }
 
 // The splash click is the audio-unlock gesture; the loop starts under the fade.

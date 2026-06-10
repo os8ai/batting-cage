@@ -61,7 +61,7 @@ for (let r = 1; r <= ROUNDS; r++) {
   await page.evaluate(() => {
     window.__pressed = {};
   });
-  await page.keyboard.press('KeyR');
+  await page.keyboard.press('Space'); // M3 token slot (R retired)
   const t0 = Date.now();
   for (;;) {
     const phase = await page.evaluate(() => window.__bc.sim.currentPhase);

@@ -44,6 +44,12 @@ export class KeyHints {
       'color:#8d8675;font-family:"Courier New",monospace;font-size:12px;letter-spacing:2px;' +
       'text-shadow:0 1px 2px #000;transition:opacity 1.2s ease;display:none';
     this.el.textContent = 'SPACE INSERT TOKEN / SWING · ARROWS SPEED · TAB STATS · H HAND · B BAT · ESC MENU';
+    // Leave the render path entirely once faded: a display:block overlay —
+    // even at opacity 0 — keeps the compositor blending DOM over the canvas
+    // and slips vsync (measured: ~6% doubled frames during the fade window).
+    this.el.addEventListener('transitionend', () => {
+      if (this.el.style.opacity === '0') this.el.style.display = 'none';
+    });
     parent.appendChild(this.el);
   }
 
@@ -59,5 +65,6 @@ export class KeyHints {
   hide(): void {
     window.clearTimeout(this.fadeTimer);
     this.el.style.opacity = '0';
+    this.el.style.display = 'none';
   }
 }

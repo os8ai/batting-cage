@@ -48,13 +48,16 @@ export class PostFX {
     this.bloom = null;
     const effects = [];
     if (this.mode.bloom !== 'OFF') {
+      // HIGH keeps the library-default half-res bloom buffer (the M1/M2
+      // chain — full-res costs ~1 ms/frame and slips vsync); MEDIUM halves
+      // it again (§11 "half-res bloom" relative to High).
       this.bloom = new SelectiveBloomEffect(this.scene, this.camera, {
         mipmapBlur: true,
         intensity: 1.15,
         luminanceThreshold: 0.12,
         luminanceSmoothing: 0.2,
         radius: 0.7,
-        resolutionScale: this.mode.bloom === 'HALF' ? 0.5 : 1,
+        resolutionScale: this.mode.bloom === 'HALF' ? 0.25 : 0.5,
       });
       this.bloom.ignoreBackground = true;
       this.bloom.inverted = false;

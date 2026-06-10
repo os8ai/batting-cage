@@ -55,20 +55,27 @@ export function downloadText(filename: string, text: string): void {
   setTimeout(() => URL.revokeObjectURL(url), 5000);
 }
 
-/** ESC-sheet import: file picker → text. */
+/** ESC-sheet import: file picker → text. (Attached to the DOM so headless
+ * drivers can intercept the chooser.) */
 export function pickFileText(): Promise<string | null> {
   return new Promise((resolve) => {
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = 'application/json,.json';
+    input.style.cssText = 'position:fixed;left:-9999px;top:0';
+    const done = (text: string | null) => {
+      input.remove();
+      resolve(text);
+    };
     input.onchange = () => {
       const f = input.files?.[0];
-      if (!f) return resolve(null);
+      if (!f) return done(null);
       const reader = new FileReader();
-      reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : null);
-      reader.onerror = () => resolve(null);
+      reader.onload = () => done(typeof reader.result === 'string' ? reader.result : null);
+      reader.onerror = () => done(null);
       reader.readAsText(f);
     };
+    document.body.appendChild(input);
     input.click();
   });
 }

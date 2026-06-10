@@ -42,7 +42,7 @@ const ANGLES = {
 };
 
 // Token → wait for LOAD (waggle) pose, then orbit.
-await page.keyboard.press('KeyR');
+await page.keyboard.press('Space'); // M3 token slot (R retired)
 const waitPhase = async (want) => {
   for (let i = 0; i < 600; i++) {
     if ((await page.evaluate(() => window.__bc.sim.currentPhase)) === want) return;

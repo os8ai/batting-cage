@@ -12,6 +12,7 @@ import { attachPointer } from './input/pointer';
 import { attachSwingInput } from './input/swing';
 import { attachUiKeys } from './input/uiKeys';
 import { bootPersistence, downloadText, pickFileText, requestDurableStorage } from './persist/browser';
+import { formatRoundSummary } from './persist/clipboard';
 import { exportSaveJson, importSaveJson, suggestedExportName } from './persist/exportImport';
 import { refusalMessage } from './persist/migrate';
 import { Recorder, type RoundOutcome } from './persist/recorder';
@@ -169,6 +170,14 @@ const escSheet = new EscSheet(document.body, {
     persisted.store.clear();
     window.location.reload();
   },
+  onCopyRound: () => {
+    // §What outputs (f): clipboard summary on demand at round end.
+    if (lastSummary === null) return;
+    navigator.clipboard
+      .writeText(lastSummary)
+      .then(() => toasts.show('ROUND COPIED'))
+      .catch(() => toasts.show('CLIPBOARD BLOCKED'));
+  },
 });
 
 function openEscSheet(): void {
@@ -190,6 +199,7 @@ function closeEscSheet(): void {
 // -- persistence subscriber (FIRST: the round outcome feeds the board) -------
 
 let lastOutcome: RoundOutcome | null = null;
+let lastSummary: string | null = null;
 let durableRequested = false;
 bus.subscribe((e) => {
   const outcome = recorder.onEvent(e);
@@ -223,6 +233,8 @@ bus.subscribe((e) => {
     cage.panel.setUnlocked(sim.unlockedTiers); // relight live (§UX)
   }
   if (e.type === 'ROUND_END') {
+    lastSummary = formatRoundSummary(e.tier, e.records);
+    escSheet.setCopyEnabled(true);
     if (lastOutcome?.madeTop5) cage.board.machine.requestInitials(save.loadout.lastInitials);
     cage.board.machine.setCoachEnabled(false); // first round complete → coaching done
     refreshCareerSurfaces();

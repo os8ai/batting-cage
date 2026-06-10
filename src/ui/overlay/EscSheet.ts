@@ -13,6 +13,8 @@ export interface EscSheetHandlers {
   onExport: () => void;
   onImport: () => void;
   onReset: () => void;
+  /** §What outputs (f): copy the last round's summary (M4). */
+  onCopyRound: () => void;
 }
 
 const KEY_REF: Array<[string, string]> = [
@@ -30,6 +32,7 @@ export class EscSheet {
   private el: HTMLDivElement;
   private resetArmed = false;
   private resetBtn!: HTMLButtonElement;
+  private copyBtn!: HTMLButtonElement;
   visible = false;
 
   constructor(
@@ -63,6 +66,9 @@ export class EscSheet {
       '<button data-id="import">IMPORT SAVE</button>' +
       '<button data-id="reset">RESET DATA</button>' +
       '</div>' +
+      '<div style="display:flex;gap:10px;margin-top:10px">' +
+      '<button data-id="copy" disabled>COPY LAST ROUND</button>' +
+      '</div>' +
       '<div data-id="keys" style="margin-top:20px;border-top:1px solid #26282d;padding-top:12px;font-size:11px;color:#8d8675"></div>' +
       '<div style="margin-top:16px;font-size:11px;color:#6b6450">ESC TO RESUME</div>';
     this.el.appendChild(panel);
@@ -92,6 +98,11 @@ export class EscSheet {
 
     panel.querySelector<HTMLButtonElement>('[data-id=export]')!.onclick = () => this.handlers.onExport();
     panel.querySelector<HTMLButtonElement>('[data-id=import]')!.onclick = () => this.handlers.onImport();
+    this.copyBtn = panel.querySelector<HTMLButtonElement>('[data-id=copy]')!;
+    this.copyBtn.style.opacity = '0.4';
+    this.copyBtn.onclick = () => {
+      if (!this.copyBtn.disabled) this.handlers.onCopyRound();
+    };
     this.resetBtn = panel.querySelector<HTMLButtonElement>('[data-id=reset]')!;
     this.resetBtn.onclick = () => {
       // Two-step confirm (§9 ESC sheet): arm, then destroy.
@@ -112,6 +123,13 @@ export class EscSheet {
     this.resetBtn.textContent = 'RESET DATA';
     this.resetBtn.style.borderColor = '#3a3e44';
     this.resetBtn.style.color = '#d8d2c2';
+  }
+
+  /** Enabled once a round exists this visit (§What f: on-demand at round end). */
+  setCopyEnabled(on: boolean): void {
+    this.copyBtn.disabled = !on;
+    this.copyBtn.style.opacity = on ? '1' : '0.4';
+    this.copyBtn.style.cursor = on ? 'pointer' : 'default';
   }
 
   /** Reflect persisted settings when opening. */

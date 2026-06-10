@@ -65,6 +65,16 @@ export const CEREMONY_S = 2.2;
 export const ROUND_OVER_S = 12;
 export const ATTRACT_PAGE_S = 6;
 
+/**
+ * ATTRACT-2/3 list layout (M4 design note 10): the M3 6-row pitch overlapped
+ * 7-row glyphs by one row. On the 40-row board a header (row 0) + four
+ * entries at a clean 8-row pitch is the densest overlap-free fit
+ * (33 + 7 = 40); entry five of a full top-5 is simply not displayed.
+ */
+export const ATTRACT_LIST_HEADER_ROW = 0;
+export const ATTRACT_LIST_ENTRY_ROWS: readonly number[] = [9, 17, 25, 33];
+export const ATTRACT_LIST_MAX_ENTRIES = ATTRACT_LIST_ENTRY_ROWS.length;
+
 const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 
 export class BoardPageMachine {

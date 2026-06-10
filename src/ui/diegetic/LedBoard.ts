@@ -3,6 +3,9 @@ import { DEG_TO_RAD, FT_TO_M } from '../../core/constants';
 import type { DomainEvent, Grade, Medal, SwingRecord } from '../../core/types';
 import { GLYPH_H, GLYPH_W, glyph, textWidthCells } from './dotFont';
 import {
+  ATTRACT_LIST_ENTRY_ROWS,
+  ATTRACT_LIST_HEADER_ROW,
+  ATTRACT_LIST_MAX_ENTRIES,
   BoardPageMachine,
   COUNT_UP_S,
   type AttractData,
@@ -368,25 +371,25 @@ export class LedBoard {
     }
     if (p.variant === 2) {
       const tierRow = data.top5ByTier.find((t) => t.tier === p.carouselTier);
-      this.centered(0, `${p.carouselTier} MPH TOP 5`, 1, 0.9);
+      this.centered(ATTRACT_LIST_HEADER_ROW, `${p.carouselTier} MPH TOP 5`, 1, 0.9);
       const entries = tierRow?.entries ?? [];
       if (entries.length === 0) {
         this.centered(18, 'NO SCORES', 1, 0.6);
         return;
       }
-      entries.slice(0, 5).forEach((e, i) => {
-        this.centered(8 + i * 6, `${e.initials} ${e.score}`, 1, i === 0 ? 0.95 : 0.7);
+      entries.slice(0, ATTRACT_LIST_MAX_ENTRIES).forEach((e, i) => {
+        this.centered(ATTRACT_LIST_ENTRY_ROWS[i]!, `${e.initials} ${e.score}`, 1, i === 0 ? 0.95 : 0.7);
       });
       return;
     }
-    this.centered(0, 'BEST ROUNDS', 1, 0.9);
-    const pbs = data.pbs.filter((b) => b.bestRoundScore > 0).slice(0, 5);
+    this.centered(ATTRACT_LIST_HEADER_ROW, 'BEST ROUNDS', 1, 0.9);
+    const pbs = data.pbs.filter((b) => b.bestRoundScore > 0).slice(0, ATTRACT_LIST_MAX_ENTRIES);
     if (pbs.length === 0) {
       this.centered(18, 'NO ROUNDS YET', 1, 0.6);
       return;
     }
     pbs.forEach((b, i) => {
-      this.centered(8 + i * 6, `${b.tier} ${b.bestRoundScore}`, 1, 0.75);
+      this.centered(ATTRACT_LIST_ENTRY_ROWS[i]!, `${b.tier} ${b.bestRoundScore}`, 1, 0.75);
     });
   }
 }

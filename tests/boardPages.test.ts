@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { DomainEvent, SwingRecord, TierMph } from '../src/core/types';
 import {
+  ATTRACT_LIST_ENTRY_ROWS,
+  ATTRACT_LIST_HEADER_ROW,
+  ATTRACT_LIST_MAX_ENTRIES,
   ATTRACT_PAGE_S,
   BoardPageMachine,
   CEREMONY_S,
@@ -9,6 +12,7 @@ import {
   ROUND_OVER_S,
   type BoardSignal,
 } from '../src/ui/diegetic/boardPages/pageMachine';
+import { GLYPH_H } from '../src/ui/diegetic/dotFont';
 import { pressForEps, runScriptedRound } from './harness';
 
 /** §9 page logic: the M1 reveal beat + the M3 recap/ceremony/initials/attract/coach set. */
@@ -302,6 +306,23 @@ describe('FTUE coach overlays (§FTUE — pure page logic)', () => {
     m.handle({ type: 'RELEASE', t: 4.8, pitch: 1 });
     m.handle({ type: 'PRESS_IGNORED', t: 3.5, reason: 'PRE_RELEASE' });
     expect(m.coachLine).toBeNull();
+  });
+});
+
+describe('ATTRACT-2/3 list layout (M4 design note 10 — the M3 overlap fix)', () => {
+  it('header + entries never overlap and fit the 40-row board', () => {
+    const BOARD_ROWS = 40;
+    let prevBottom = ATTRACT_LIST_HEADER_ROW + GLYPH_H; // header occupies rows 0..6
+    for (const row of ATTRACT_LIST_ENTRY_ROWS) {
+      expect(row, 'entry row clears the line above').toBeGreaterThanOrEqual(prevBottom + 1);
+      prevBottom = row + GLYPH_H;
+    }
+    expect(prevBottom).toBeLessThanOrEqual(BOARD_ROWS); // last entry ends on the board
+  });
+
+  it('shows at most four entries (entry five of a full top-5 is dropped, not squeezed)', () => {
+    expect(ATTRACT_LIST_MAX_ENTRIES).toBe(4);
+    expect(ATTRACT_LIST_ENTRY_ROWS).toHaveLength(ATTRACT_LIST_MAX_ENTRIES);
   });
 });
 

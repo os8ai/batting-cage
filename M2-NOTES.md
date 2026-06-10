@@ -78,6 +78,19 @@ node scripts/net-shots.mjs  # E1 harness: low/mid/high-EV net reaction
    steps with tier (§5 "louder at higher tiers").
 8. **−0/+0 Verlet pitfall**: constraint relaxation must skip zero-weight
    (pinned) writes — `(-0) + 0 === +0` breaks bit-exact pin assertions.
+9. **Owner-playtest fix (post-exit): the side nets read as solid black.**
+   Three stacked occluders, each masking the next (which is why no single
+   change showed until all three fell): (a) the M1 "sibling cage silhouette"
+   was two SOLID 3.4×14 m slabs walling off the whole aisle — replaced with
+   an open post-and-rail frame on BOTH sides plus a turf lane and a soft
+   transparent veil (alpha-tested weave mips read solid at aisle distances);
+   (b) the facility side walls/pads had outward normals — backface-culled
+   from inside since M1, the "walls" were the void; (c) the pad texture's
+   navy base was ~2% linear albedo — black under any light (lifted to
+   ~[88,100,134] + tint/sheen). Aisle treatment: 6 house fixtures (dim,
+   NON-bloomed lenses — the cage stays the warmest thing in frame, §11) with
+   aimed SpotLight pools on the sibling lanes. Re-verified after: 60.0 fps,
+   impact ratio 1.006×, 116 draw calls, all 148 tests green.
 
 ## Deferred-cue ledger (→ M3, with the pages/events that trigger them)
 

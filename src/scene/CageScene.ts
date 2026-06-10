@@ -215,7 +215,7 @@ export class CageScene {
     floor.receiveShadow = true;
     this.scene.add(floor);
 
-    const wallMat = new THREE.MeshStandardMaterial({ map: concrete, color: 0x46484c, roughness: 0.95 });
+    const wallMat = new THREE.MeshStandardMaterial({ map: concrete, color: 0xaaadb2, roughness: 0.95 });
     const mkWall = (w: number, h: number): THREE.Mesh => new THREE.Mesh(new THREE.PlaneGeometry(w, h), wallMat);
 
     const far = mkWall(halfW * 2, height);
@@ -227,7 +227,10 @@ export class CageScene {
     this.scene.add(near);
     for (const side of [-1, 1]) {
       const wall = mkWall(len, height);
-      wall.rotation.y = (side * Math.PI) / 2;
+      // Normal must face the facility INTERIOR — with the sign the other way
+      // these planes were backface-culled from inside and the "walls" were
+      // actually the void background (owner playtest, M2: black side nets).
+      wall.rotation.y = (-side * Math.PI) / 2;
       wall.position.set(side * halfW, height / 2, (zMin + zMax) / 2);
       this.scene.add(wall);
     }
@@ -238,31 +241,83 @@ export class CageScene {
     this.scene.add(ceil);
 
     // Padded lower walls (§4) — vinyl panels to 7 ft on both side walls.
-    const padMat = new THREE.MeshStandardMaterial({ map: pad, roughness: 0.8 });
+    // Lifted tint + sheen (owner playtest, M2): the raw navy texture is ~5%
+    // albedo, which swallowed the aisle pools and read as a black void
+    // through the side nets — no light level could fix an albedo problem.
+    const padMat = new THREE.MeshStandardMaterial({ map: pad, color: 0xb8c2d8, roughness: 0.55 });
     for (const side of [-1, 1]) {
       const pads = new THREE.Mesh(new THREE.PlaneGeometry(len, 7 * FT_TO_M), padMat);
-      pads.rotation.y = (side * Math.PI) / 2;
+      pads.rotation.y = (-side * Math.PI) / 2;
       pads.position.set(side * (halfW - 0.02), (7 * FT_TO_M) / 2, (zMin + zMax) / 2);
       this.scene.add(pads);
     }
 
-    // Dark sibling cage silhouette beyond the -x netting (§4).
-    const sibling = new THREE.Group();
-    const silMat = new THREE.MeshStandardMaterial({ color: 0x0e0f11, roughness: 1 });
-    const silFrame = new THREE.Mesh(new THREE.BoxGeometry(0.06, 3.4, 14), silMat);
-    for (const fx of [-16.5 * FT_TO_M, -12.5 * FT_TO_M]) {
-      const f = silFrame.clone();
-      f.position.set(fx, 1.7, 8);
-      sibling.add(f);
+    // Sibling cages beyond BOTH side nets, dimly lit by the aisle fixtures
+    // (owner playtest, M2): with nothing visible behind the side netting it
+    // read as a solid black wall — lit depth makes the weave translucent.
+    // One instanced draw for all rails, one for both net planes, one for
+    // both turf strips (§12 budget).
+    // Open framework of thin posts + rails — NOT the M1 silhouette slabs
+    // (those were solid 3.4×14 m boxes that walled off the whole aisle and
+    // were the actual "black wall" behind the side nets).
+    const sibMat = new THREE.MeshStandardMaterial({ color: 0x3a3e44, roughness: 0.7, metalness: 0.5 });
+    const railGeo = new THREE.BoxGeometry(1, 1, 1);
+    const sibRails = new THREE.InstancedMesh(railGeo, sibMat, 28);
+    const sm = new THREE.Matrix4();
+    const sv = new THREE.Vector3();
+    const sq = new THREE.Quaternion();
+    let si = 0;
+    for (const side of [-1, 1]) {
+      for (const fxFt of [12.5, 16.5]) {
+        const x = side * fxFt * FT_TO_M;
+        // Posts every ~4.3 m along the sibling lane.
+        for (const z of [1.2, 5.5, 9.8, 14.2]) {
+          sm.compose(sv.set(x, 1.7, z), sq.identity(), new THREE.Vector3(0.06, 3.4, 0.06));
+          sibRails.setMatrixAt(si++, sm);
+        }
+        // Top rail the length of the lane.
+        sm.compose(sv.set(x, 3.4, 7.7), sq.identity(), new THREE.Vector3(0.05, 0.05, 13.0));
+        sibRails.setMatrixAt(si++, sm);
+      }
+      // Cross rails closing the frame at both ends.
+      for (const z of [1.2, 14.2]) {
+        sm.compose(
+          sv.set(side * 14.5 * FT_TO_M, 3.4, z),
+          sq.identity(),
+          new THREE.Vector3((16.5 - 12.5) * FT_TO_M, 0.05, 0.05)
+        );
+        sibRails.setMatrixAt(si++, sm);
+      }
     }
-    const silNet = new THREE.Mesh(
-      new THREE.PlaneGeometry(14, 3.4),
-      new THREE.MeshStandardMaterial({ color: 0x0a0b0c, roughness: 1, transparent: true, opacity: 0.85 })
+    sibRails.count = si;
+    this.scene.add(sibRails);
+
+    // Sibling nets are a soft transparent veil, not alpha-tested weave: at
+    // aisle distances the weave mips average above the alphaTest threshold
+    // and the panel reads as a SOLID wall (the original black-slab bug).
+    const sibNetMat = new THREE.MeshStandardMaterial({
+      color: 0x303236,
+      roughness: 1,
+      transparent: true,
+      opacity: 0.4,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    });
+    const sibNets = new THREE.InstancedMesh(new THREE.PlaneGeometry(14, 3.4), sibNetMat, 2);
+    const sibTurf = new THREE.InstancedMesh(
+      new THREE.PlaneGeometry(7 * FT_TO_M, 14),
+      new THREE.MeshStandardMaterial({ color: 0x35583c, roughness: 1 }),
+      2
     );
-    silNet.rotation.y = Math.PI / 2;
-    silNet.position.set(-14.5 * FT_TO_M, 1.7, 8);
-    sibling.add(silNet);
-    this.scene.add(sibling);
+    [-1, 1].forEach((side, i) => {
+      sq.setFromAxisAngle(sv.set(0, 1, 0), Math.PI / 2);
+      sm.compose(new THREE.Vector3(side * 14.5 * FT_TO_M, 1.7, 8), sq, new THREE.Vector3(1, 1, 1));
+      sibNets.setMatrixAt(i, sm);
+      sq.setFromAxisAngle(sv.set(1, 0, 0), -Math.PI / 2);
+      sm.compose(new THREE.Vector3(side * 14.5 * FT_TO_M, 0.004, 8), sq, new THREE.Vector3(1, 1, 1));
+      sibTurf.setMatrixAt(i, sm);
+    });
+    this.scene.add(sibNets, sibTurf);
 
     // EXIT door + glowing sign on the near wall (-z, behind the batter).
     const door = new THREE.Mesh(new THREE.BoxGeometry(1.0, 2.1, 0.06), new THREE.MeshStandardMaterial({ color: 0x2a2d33, roughness: 0.7 }));

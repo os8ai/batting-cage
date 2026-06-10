@@ -122,7 +122,9 @@ export function padTexture(): THREE.CanvasTexture {
   const S = 512;
   const [c, ctx] = canvas(S, S);
   const rnd = mulberry(0x9ad5);
-  noisyFill(ctx, S, S, rnd, [38, 50, 84], 6);
+  // Base lifted from [38,50,84] (owner playtest, M2): that navy is ~2%
+  // albedo once sRGB-decoded — it rendered black under ANY light level.
+  noisyFill(ctx, S, S, rnd, [88, 100, 134], 6);
   // Panel seams + soft highlight per panel.
   const cols = 4;
   for (let p = 0; p < cols; p++) {

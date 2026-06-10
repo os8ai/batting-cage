@@ -30,8 +30,21 @@ export class Lighting {
       roughness: 0.4,
     });
 
-    // One instanced draw each for the six housings and six lenses (§12).
-    const housings = new THREE.InstancedMesh(housingGeo, housingMat, 6);
+    // Aisle "house" fixtures over the side walkways (owner playtest, M2: the
+    // facility beyond the side nets was pitch black, so the weave read as a
+    // solid wall — §4 says near-dark, not black). Same instanced draws.
+    const aisleY = 13 * FT_TO_M;
+    const aislePos: Array<[number, number]> = [
+      [-13 * FT_TO_M, 8 * FT_TO_M],
+      [-13 * FT_TO_M, 22 * FT_TO_M],
+      [-13 * FT_TO_M, 36 * FT_TO_M],
+      [13 * FT_TO_M, 8 * FT_TO_M],
+      [13 * FT_TO_M, 22 * FT_TO_M],
+      [13 * FT_TO_M, 36 * FT_TO_M],
+    ];
+
+    // One instanced draw each for the cage-line housings and lenses (§12).
+    const housings = new THREE.InstancedMesh(housingGeo, housingMat, 6 + aislePos.length);
     const lenses = new THREE.InstancedMesh(lensGeo, lensMat, 6);
     const im = new THREE.Matrix4();
     for (let i = 0; i < 6; i++) {
@@ -43,6 +56,36 @@ export class Lighting {
     }
     this.group.add(housings, lenses);
     this.glowMeshes.push(lenses as unknown as THREE.Mesh);
+
+    // Aisle lenses get their own dim, NON-bloomed material — house lights,
+    // not stage lights (the cage stays the warmest thing in frame, §11).
+    const aisleLensMat = new THREE.MeshStandardMaterial({
+      color: 0xe8efe9,
+      emissive: 0xdfe8e0,
+      emissiveIntensity: 0.75,
+      roughness: 0.5,
+    });
+    const aisleLenses = new THREE.InstancedMesh(lensGeo, aisleLensMat, aislePos.length);
+    aislePos.forEach(([x, z], i) => {
+      im.makeTranslation(x, aisleY, z);
+      housings.setMatrixAt(6 + i, im);
+      im.makeTranslation(x, aisleY - 0.17, z);
+      aisleLenses.setMatrixAt(i, im);
+    });
+    this.group.add(aisleLenses);
+
+    // Aisle pools (no shadows — cheap): cones aimed down at the sibling-cage
+    // lanes, same language as the cage's own light pools. Directed light
+    // makes the aisle READ through the weave without flooding the cage —
+    // the cage stays the stage (§4).
+    for (const [x, z] of aislePos) {
+      const pool = new THREE.SpotLight(0xdde6de, 160, 0, 0.6, 0.6, 1.7);
+      pool.position.set(x, aisleY - 0.3, z);
+      // Tilted outward: the cone grazes the sibling net and the wall pads on
+      // its way to the lane, so the aisle has lit VERTICAL surfaces too.
+      pool.target.position.set(Math.sign(x) * 18.5 * FT_TO_M, 0, z);
+      this.group.add(pool, pool.target);
+    }
 
     // Key: shadow caster over the plate (§4 — 2048 soft).
     const key = new THREE.SpotLight(0xfff2dd, 260, 0, 0.62, 0.45, 1.6);

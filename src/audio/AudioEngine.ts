@@ -5,9 +5,11 @@ import type { CueTrigger } from './cueMap';
 import {
   backstopThud,
   boardTick,
+  countUpLoop,
   feedClunk,
   frameClang,
   guardRattle,
+  medalStamp,
   metalPing,
   netRustle,
   panelClick,
@@ -17,6 +19,7 @@ import {
   tokenClink,
   turfBounce,
   turfRollLoop,
+  unlockKlaxon,
   whiffSwish,
   whirrLoop,
   whooshLoop,
@@ -106,6 +109,8 @@ export class AudioEngine {
   private whoosh: THREE.PositionalAudio;
   private roll: THREE.PositionalAudio;
   private room: THREE.Audio;
+  /** Looping count-up ticks on the board anchor (§10 RECAP). */
+  private countUp: THREE.PositionalAudio;
   private whirrTierRate = 1;
   private unlocked = false;
   private muted = false;
@@ -134,6 +139,9 @@ export class AudioEngine {
     rollLoop?: AudioBuffer;
     tick?: AudioBuffer;
     room?: AudioBuffer;
+    countUp?: AudioBuffer;
+    stamp?: AudioBuffer;
+    klaxon?: AudioBuffer;
   } = {};
 
   constructor() {
@@ -153,6 +161,10 @@ export class AudioEngine {
     this.roll.setRefDistance(3);
     this.roll.setRolloffFactor(1.2);
     this.ballAnchor.add(this.whoosh, this.roll);
+    this.countUp = new THREE.PositionalAudio(this.listener);
+    this.countUp.setRefDistance(8);
+    this.countUp.setRolloffFactor(1.1);
+    this.boardAnchor.object.add(this.countUp);
     this.room = new THREE.Audio(this.listener); // the Ambience bed, non-spatial
   }
 
@@ -179,6 +191,9 @@ export class AudioEngine {
     this.bufs.rollLoop = turfRollLoop(ctx);
     this.bufs.tick = boardTick(ctx);
     this.bufs.room = roomTone(ctx);
+    this.bufs.countUp = countUpLoop(ctx);
+    this.bufs.stamp = medalStamp(ctx);
+    this.bufs.klaxon = unlockKlaxon(ctx);
     this.unlocked = true;
     // The Ambience bed runs for the whole visit (§10 room tone).
     this.room.setBuffer(this.bufs.room);
@@ -276,6 +291,23 @@ export class AudioEngine {
         break;
       case 'boardTick':
         this.boardAnchor.play(b.tick!, 0.6);
+        break;
+      case 'countUpStart':
+        if (b.countUp && !this.countUp.isPlaying) {
+          this.countUp.setBuffer(b.countUp);
+          this.countUp.setLoop(true);
+          this.countUp.setVolume(0.55);
+          this.countUp.play();
+        }
+        break;
+      case 'countUpStop':
+        this.fadeStop(this.countUp, 0.1);
+        break;
+      case 'medalStamp':
+        this.boardAnchor.play(b.stamp!, 0.95);
+        break;
+      case 'unlockKlaxon':
+        this.boardAnchor.play(b.klaxon!, 0.9);
         break;
     }
   }

@@ -7,8 +7,8 @@ import * as synth from '../src/audio/synth';
  * Runs headless against a minimal AudioContext stand-in (synthesis is pure
  * math over createBuffer).
  *
- * M3-deferred §10 rows (recorded, not stubbed): score count-up, medal stamp,
- * unlock klaxon — they land with the board pages/events that trigger them.
+ * M3: the deferred ceremony rows (score count-up, medal stamp, unlock
+ * klaxon) are now part of the shipped set.
  */
 class FakeBuffer {
   private data: Float32Array;
@@ -49,9 +49,13 @@ const SYNTHS: Record<string, () => AudioBuffer> = {
   turfRollLoop: () => synth.turfRollLoop(ctx),
   boardTick: () => synth.boardTick(ctx),
   roomTone: () => synth.roomTone(ctx),
+  // M3 ceremony rows — the M2 deferred-cue ledger, landed:
+  countUpLoop: () => synth.countUpLoop(ctx),
+  medalStamp: () => synth.medalStamp(ctx),
+  unlockKlaxon: () => synth.unlockKlaxon(ctx),
 };
 
-const LOOPS = ['whirrLoop', 'whooshLoop', 'turfRollLoop', 'roomTone'];
+const LOOPS = ['whirrLoop', 'whooshLoop', 'turfRollLoop', 'roomTone', 'countUpLoop'];
 
 describe('§10 synth inventory (E4)', () => {
   for (const [name, make] of Object.entries(SYNTHS)) {

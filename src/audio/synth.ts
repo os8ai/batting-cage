@@ -414,3 +414,64 @@ export function tokenClink(ctx: AudioContext): AudioBuffer {
   normalize(data, 0.75);
   return buf;
 }
+
+/** Score count-up tick loop (§10 RECAP) — a rising arpeggio of dot-matrix
+ * ticks, loop-safe: tick spacing divides the loop and every partial fits. */
+export function countUpLoop(ctx: AudioContext): AudioBuffer {
+  const dur = 0.5;
+  const { buf, data, sr } = buffer(ctx, dur);
+  const ticksPerLoop = 8;
+  const tickLen = dur / ticksPerLoop;
+  const fit = (f: number) => Math.round(f * tickLen) / tickLen;
+  for (let k = 0; k < ticksPerLoop; k++) {
+    const f = fit(1500 + 120 * k); // rises across the loop
+    const start = Math.round(k * tickLen * sr);
+    const n = Math.round(0.03 * sr);
+    for (let i = 0; i < n && start + i < data.length; i++) {
+      const t = i / sr;
+      data[start + i] = Math.sin(2 * Math.PI * f * t) * Math.exp(-t / 0.01);
+    }
+  }
+  normalize(data, 0.5);
+  return buf;
+}
+
+/** Medal stamp (§10 ceremony) — a deep press with a bright shimmer tail. */
+export function medalStamp(ctx: AudioContext): AudioBuffer {
+  const { buf, data, sr } = buffer(ctx, 0.7);
+  const noise = lcg(0x4eda1);
+  for (let i = 0; i < data.length; i++) {
+    const t = i / sr;
+    const press = Math.sin(2 * Math.PI * (95 - 40 * t) * t) * Math.exp(-t / 0.09);
+    const clank = noise() * Math.exp(-t / 0.015);
+    const shimmer =
+      (Math.sin(2 * Math.PI * 1318 * t) + 0.7 * Math.sin(2 * Math.PI * 1760 * t) + 0.5 * Math.sin(2 * Math.PI * 2637 * t)) *
+      Math.exp(-Math.max(0, t - 0.05) / 0.18) *
+      (t > 0.05 ? 0.3 : 0);
+    data[i] = press * 1.0 + clank * 0.4 + shimmer;
+  }
+  onePoleLP(data, sr, 5200);
+  normalize(data, 0.88);
+  return buf;
+}
+
+/** Unlock klaxon (§10 ceremony) — two-tone facility horn with light flash. */
+export function unlockKlaxon(ctx: AudioContext): AudioBuffer {
+  const { buf, data, sr } = buffer(ctx, 1.1);
+  for (let i = 0; i < data.length; i++) {
+    const t = i / sr;
+    const seg = t < 0.42 ? 0 : t < 0.5 ? 1 : 2; // tone, gap, tone
+    const f = seg === 0 ? 392 : 523; // G4 → C5
+    const on = seg === 1 ? 0 : 1;
+    const env = seg === 0 ? Math.min(1, t / 0.02) : Math.min(1, Math.max(0, (t - 0.5) / 0.02));
+    const tail = Math.exp(-Math.max(0, t - 0.95) / 0.06);
+    const square =
+      Math.sin(2 * Math.PI * f * t) +
+      0.33 * Math.sin(2 * Math.PI * 3 * f * t) +
+      0.2 * Math.sin(2 * Math.PI * 5 * f * t);
+    data[i] = square * on * env * tail * 0.8;
+  }
+  onePoleLP(data, sr, 3600);
+  normalize(data, 0.8);
+  return buf;
+}

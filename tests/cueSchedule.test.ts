@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   createCueContext,
+  cuesForBoardSignal,
   cuesForEvent,
   rustleGain,
   type CueAnchor,
@@ -128,6 +129,10 @@ describe('cue schedule (E2)', () => {
       guardRattle: 'impact',
       turfBounce: 'impact',
       boardTick: 'board',
+      countUpStart: 'board',
+      countUpStop: 'board',
+      medalStamp: 'board',
+      unlockKlaxon: 'board',
     };
     const presses = [
       { t: pressForEps(60, 1, 0) },
@@ -213,5 +218,36 @@ describe('cue schedule (E2)', () => {
     const metal = createCueContext('METAL');
     const metalCues = events.flatMap((e) => cuesForEvent(e, metal)).filter((c) => c.anchor === 'plate');
     expect(metalCues.map((c) => c.cue)).toEqual(['contactMetal', 'perfectThump', 'contactMetal']);
+  });
+});
+
+describe('§10 ceremony cues ride the board signals (M3 — deferred-cue ledger)', () => {
+  it('count-up loop opens with the recap envelope and closes at its end', () => {
+    expect(cuesForBoardSignal({ kind: 'COUNT_UP_START' }, 80).map((c) => c.cue)).toEqual(['countUpStart']);
+    const end = cuesForBoardSignal({ kind: 'COUNT_UP_END', medal: null }, 82);
+    expect(end.map((c) => c.cue)).toEqual(['countUpStop']);
+  });
+
+  it('the medal stamp sounds exactly when the stamp appears (count-up end)', () => {
+    const end = cuesForBoardSignal({ kind: 'COUNT_UP_END', medal: 'bronze' }, 82);
+    expect(end.map((c) => c.cue)).toEqual(['countUpStop', 'medalStamp']);
+    for (const trig of end) expect(trig.anchor).toBe('board');
+  });
+
+  it('the klaxon fires on the UNLOCK ceremony flash; PB/CLUB flashes tick', () => {
+    expect(cuesForBoardSignal({ kind: 'CEREMONY', item: { kind: 'UNLOCK' } }, 85).map((c) => c.cue)).toEqual([
+      'unlockKlaxon',
+    ]);
+    expect(cuesForBoardSignal({ kind: 'CEREMONY', item: { kind: 'PB' } }, 85).map((c) => c.cue)).toEqual([
+      'boardTick',
+    ]);
+    expect(cuesForBoardSignal({ kind: 'CEREMONY', item: { kind: 'CLUB' } }, 85).map((c) => c.cue)).toEqual([
+      'boardTick',
+    ]);
+  });
+
+  it('page flips and initials confirm keep the §UX audio-confirm rule', () => {
+    expect(cuesForBoardSignal({ kind: 'PAGE_FLIP' }, 1).map((c) => c.cue)).toEqual(['boardTick']);
+    expect(cuesForBoardSignal({ kind: 'INITIALS_DONE' }, 1).map((c) => c.cue)).toEqual(['boardTick']);
   });
 });

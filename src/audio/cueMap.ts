@@ -34,7 +34,12 @@ export type CueName =
   | 'turfBounce'
   | 'rollStart' // roll loop on the ball emitter
   | 'rollStop' // sleep silences (§10)
-  | 'boardTick';
+  | 'boardTick'
+  // §10 ceremony rows (M3 — the M2 deferred-cue ledger):
+  | 'countUpStart' // rising tick loop under the recap score count-up
+  | 'countUpStop'
+  | 'medalStamp'
+  | 'unlockKlaxon';
 
 export type CueAnchor = 'machine' | 'plate' | 'panel' | 'board' | 'ball' | 'impact';
 
@@ -65,6 +70,41 @@ export function createCueContext(bat: Bat = 'WOOD'): CueContext {
 export function rustleGain(speedMps: number): number {
   const g = (speedMps * speedMps) / (40 * 40);
   return Math.min(1, Math.max(0.06, g));
+}
+
+/**
+ * §10 ceremony cues ride the BOARD's signal stream rather than raw domain
+ * events: the medal stamp must SOUND when the stamp APPEARS (count-up end),
+ * and the klaxon when the unlock page flashes — the recap envelope is the
+ * anchor (M3-PLAN design note 2). Still pure and deterministic: board signals
+ * derive from domain-event times through the page machine's fixed beats.
+ * Structural signal type — keeps audio/ free of ui/ imports.
+ */
+export interface BoardSignalLike {
+  kind: 'COUNT_UP_START' | 'COUNT_UP_END' | 'CEREMONY' | 'INITIALS_DONE' | 'PAGE_FLIP';
+  medal?: unknown | null;
+  item?: { kind: 'PB' | 'CLUB' | 'UNLOCK' };
+}
+
+export function cuesForBoardSignal(s: BoardSignalLike, t: number): CueTrigger[] {
+  switch (s.kind) {
+    case 'COUNT_UP_START':
+      return [{ cue: 'countUpStart', anchor: 'board', t }];
+    case 'COUNT_UP_END':
+      return s.medal != null
+        ? [
+            { cue: 'countUpStop', anchor: 'board', t },
+            { cue: 'medalStamp', anchor: 'board', t },
+          ]
+        : [{ cue: 'countUpStop', anchor: 'board', t }];
+    case 'CEREMONY':
+      return s.item?.kind === 'UNLOCK'
+        ? [{ cue: 'unlockKlaxon', anchor: 'board', t }]
+        : [{ cue: 'boardTick', anchor: 'board', t }];
+    case 'INITIALS_DONE':
+    case 'PAGE_FLIP':
+      return [{ cue: 'boardTick', anchor: 'board', t }];
+  }
 }
 
 /**

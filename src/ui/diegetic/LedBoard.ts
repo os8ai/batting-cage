@@ -31,6 +31,8 @@ export class LedBoard {
   private ctx: CanvasRenderingContext2D;
   private texture: THREE.CanvasTexture;
   private faceMat: THREE.MeshBasicMaterial;
+  /** Remaining seconds of the reveal-beat brightness pop (M2). */
+  private popLeftS = 0;
   private unlit: HTMLCanvasElement;
 
   constructor() {
@@ -93,13 +95,20 @@ export class LedBoard {
 
   onEvent(e: DomainEvent): void {
     if (this.machine.handle(e)) this.renderPage();
+    // The reveal beat (M2): the card flip lands with a brightness pop — a
+    // 120 ms color-scalar envelope, zero canvas cost (pairs with boardTick).
+    if (e.type === 'BOARD_REVEAL') this.popLeftS = 0.12;
   }
 
   /** Refresh shimmer — cheap per-frame color wobble, no canvas redraw. The
    * >1 base drives the face into the bloom threshold (the warmest thing in
    * frame, §11) without re-painting the canvas. */
-  update(timeS: number): void {
-    const s = 1.55 + 0.07 * Math.sin(timeS * 47.0) * Math.sin(timeS * 9.3);
+  update(timeS: number, dt = 0): void {
+    let s = 1.55 + 0.07 * Math.sin(timeS * 47.0) * Math.sin(timeS * 9.3);
+    if (this.popLeftS > 0) {
+      this.popLeftS = Math.max(0, this.popLeftS - dt);
+      s *= 1 + 0.5 * (this.popLeftS / 0.12);
+    }
     this.faceMat.color.setScalar(s);
   }
 

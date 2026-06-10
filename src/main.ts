@@ -67,7 +67,10 @@ bus.subscribe((e) => {
     cage.setBattedTrail(true);
   }
   if (e.type === 'FEED' || e.type === 'BALL_SETTLED' || e.type === 'ROUND_END') cage.setBattedTrail(false);
-  if (e.type === 'TOKEN') goToStation('PLAY');
+  if (e.type === 'TOKEN') {
+    goToStation('PLAY');
+    cage.startSweep(); // between-round feeder-cart sweep, inside SPINUP's 3 s
+  }
 });
 
 // -- station interaction (camera director + machine panel) -------------------

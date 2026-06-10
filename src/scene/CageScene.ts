@@ -57,6 +57,13 @@ export class CageScene {
   private trailCursor = 0;
   private trailOn = false;
   private rackBats: Record<'WOOD' | 'METAL', THREE.Object3D>;
+  private settledMat: THREE.MeshStandardMaterial;
+  // Between-round feeder-cart sweep (M2 P4): purely presentational — the sim
+  // cleared its pool at TOKEN (M0 behavior); these meshes play out the fiction.
+  private cart!: THREE.Group;
+  private cartHome = new THREE.Vector3();
+  private sweepT = -1; // < 0 = idle
+  private sweptBalls: THREE.Mesh[] = [];
 
   // Previous/current tick ball position for interpolated rendering.
   private prev = new THREE.Vector3();
@@ -106,10 +113,10 @@ export class CageScene {
     this.ballShadow.visible = false;
     this.scene.add(this.ballShadow);
 
-    const settledMat = new THREE.MeshStandardMaterial({ color: 0xdedcd2, roughness: 0.55 });
+    this.settledMat = new THREE.MeshStandardMaterial({ color: 0xdedcd2, roughness: 0.55 });
     const settledGeo = new THREE.SphereGeometry(BALL_RADIUS_M, 12, 8);
     for (let i = 0; i < SETTLED_POOL; i++) {
-      const m = new THREE.Mesh(settledGeo, settledMat);
+      const m = new THREE.Mesh(settledGeo, this.settledMat);
       m.castShadow = true;
       m.visible = false;
       this.scene.add(m);
@@ -287,6 +294,7 @@ export class CageScene {
     this.scene.add(bench);
 
     const cart = new THREE.Group();
+    this.cart = cart;
     const bin = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.3, 0.5, 14, 1, true), new THREE.MeshStandardMaterial({ color: 0x4a4e54, roughness: 0.5, metalness: 0.6, side: THREE.DoubleSide }));
     bin.position.y = 0.55;
     cart.add(bin);
@@ -303,6 +311,7 @@ export class CageScene {
     }
     cart.add(cartBalls);
     cart.position.set(-3.4, 0, 5.5);
+    this.cartHome.copy(cart.position);
     this.scene.add(cart);
   }
 
@@ -489,6 +498,65 @@ export class CageScene {
     return this.ball.visible ? this.ball.position : null;
   }
 
+  /**
+   * Between-round feeder-cart sweep (M2 P4): on re-token, the cart slides a
+   * brush pass down the lane during SPINUP's 3 s; the settled pile is pushed
+   * to the machine-end gutter and fades. Visual only — never delays the §5
+   * clock. No-op when the floor is already clean (first round).
+   */
+  startSweep(): void {
+    this.sweptBalls = this.settledBalls.filter((m) => m.visible);
+    if (this.sweptBalls.length === 0) return;
+    this.sweepT = 0;
+  }
+
+  private updateSweep(dt: number): void {
+    const T_OUT = 1.7; // cart reaches the gutter
+    const T_FADE = 2.3; // pile fully faded
+    const T_END = 2.9; // cart parked again (inside SPINUP's 3 s)
+    const GUTTER_Z = 13.9;
+    const LANE_X = 0.55; // brush pass beside the worn lane
+    this.sweepT += dt;
+    const t = this.sweepT;
+    const ease = (u: number): number => u * u * (3 - 2 * u);
+
+    if (t <= T_OUT) {
+      const u = ease(Math.min(1, t / T_OUT));
+      // In through the door flap, then straight down the lane.
+      this.cart.position.set(
+        THREE.MathUtils.lerp(this.cartHome.x, LANE_X, Math.min(1, u * 3)),
+        0,
+        THREE.MathUtils.lerp(this.cartHome.z, GUTTER_Z, u)
+      );
+      // The brush front pushes any ball it has passed toward the gutter.
+      for (const m of this.sweptBalls) {
+        if (this.cart.position.z > m.position.z) {
+          m.position.z = this.cart.position.z + 0.45;
+          m.position.x += (Math.sign(m.position.x || 1) * 0.6 - m.position.x) * Math.min(1, dt * 3);
+        }
+      }
+    } else if (t <= T_END) {
+      const u = ease(Math.min(1, (t - T_OUT) / (T_END - T_OUT)));
+      this.cart.position.set(
+        THREE.MathUtils.lerp(LANE_X, this.cartHome.x, u),
+        0,
+        THREE.MathUtils.lerp(GUTTER_Z, this.cartHome.z, u)
+      );
+    }
+    // Pile fades out as the cart collects it.
+    const fade = THREE.MathUtils.clamp((T_FADE - t) / (T_FADE - 1.0), 0, 1);
+    this.settledMat.transparent = true;
+    this.settledMat.opacity = fade;
+    if (t >= T_END) {
+      this.sweepT = -1;
+      for (const m of this.sweptBalls) m.visible = false;
+      this.sweptBalls = [];
+      this.settledMat.transparent = false;
+      this.settledMat.opacity = 1;
+      this.cart.position.copy(this.cartHome);
+    }
+  }
+
   showFocus(at: THREE.Vector3 | null): void {
     if (at) {
       this.focusRing.position.set(at.x, at.y, at.z);
@@ -537,21 +605,27 @@ export class CageScene {
     }
     (this.trail.geometry.attributes.aAge as THREE.BufferAttribute).needsUpdate = true;
 
-    for (let i = 0; i < this.settledBalls.length; i++) {
-      const mesh = this.settledBalls[i]!;
-      const b = sim.settled[i];
-      if (b) {
-        mesh.visible = true;
-        mesh.position.set(b.px, b.py, b.pz);
-      } else {
-        mesh.visible = false;
+    if (this.sweepT >= 0) {
+      // The sweep owns the settled meshes until the cart parks (the sim's
+      // pool is already empty — the fiction plays out during SPINUP).
+      this.updateSweep(dt);
+    } else {
+      for (let i = 0; i < this.settledBalls.length; i++) {
+        const mesh = this.settledBalls[i]!;
+        const b = sim.settled[i];
+        if (b) {
+          mesh.visible = true;
+          mesh.position.set(b.px, b.py, b.pz);
+        } else {
+          mesh.visible = false;
+        }
       }
     }
 
     this.machine.update(sim);
     this.batter.update(dt);
     this.net.update(dt, timeS);
-    this.board.update(timeS);
+    this.board.update(timeS, dt);
     this.panel.update(timeS);
     this.lighting.update(dt, timeS);
     if (this.focusRing.visible) {

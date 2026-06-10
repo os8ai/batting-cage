@@ -50,6 +50,8 @@ export class CageScene {
   private ballShadow: THREE.Mesh;
   private settledBalls: THREE.Mesh[] = [];
   private focusRing: THREE.Mesh;
+  private netBlip: THREE.Sprite;
+  private netBlipAge = -1;
   private rackBats: Record<'WOOD' | 'METAL', THREE.Object3D>;
   private netUniforms = { uTime: { value: 0 } };
 
@@ -109,6 +111,25 @@ export class CageScene {
       this.scene.add(m);
       this.settledBalls.push(m);
     }
+
+    // Net-impact blip: a brief soft flash at NET_HIT so ceiling/side catches
+    // read from the play camera (placeholder until M2's cloth reaction —
+    // owner playtest: an unseen ceiling catch looks like a ground bounce).
+    const blipCanvas = document.createElement('canvas');
+    blipCanvas.width = blipCanvas.height = 64;
+    const bctx = blipCanvas.getContext('2d')!;
+    const bg = bctx.createRadialGradient(32, 32, 2, 32, 32, 32);
+    bg.addColorStop(0, 'rgba(255,240,200,0.9)');
+    bg.addColorStop(0.4, 'rgba(255,220,150,0.35)');
+    bg.addColorStop(1, 'rgba(255,200,120,0)');
+    bctx.fillStyle = bg;
+    bctx.fillRect(0, 0, 64, 64);
+    const blipTex = new THREE.CanvasTexture(blipCanvas);
+    this.netBlip = new THREE.Sprite(
+      new THREE.SpriteMaterial({ map: blipTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending })
+    );
+    this.netBlip.visible = false;
+    this.scene.add(this.netBlip);
 
     // Focus highlight ring (station selection cue, §UX).
     this.focusRing = new THREE.Mesh(
@@ -482,6 +503,13 @@ export class CageScene {
     this.rackBats.METAL.visible = b !== 'METAL';
   }
 
+  /** NET_HIT cue — flash at the ball's current render position. */
+  flashNetHit(): void {
+    this.netBlip.position.copy(this.ball.position);
+    this.netBlipAge = 0;
+    this.netBlip.visible = true;
+  }
+
   showFocus(at: THREE.Vector3 | null): void {
     if (at) {
       this.focusRing.position.set(at.x, at.y, at.z);
@@ -532,6 +560,19 @@ export class CageScene {
     this.netUniforms.uTime.value = timeS;
     if (this.focusRing.visible) {
       (this.focusRing.material as THREE.MeshBasicMaterial).opacity = 0.45 + 0.25 * Math.sin(timeS * 5);
+    }
+
+    if (this.netBlipAge >= 0) {
+      this.netBlipAge += dt;
+      const life = 0.35;
+      if (this.netBlipAge >= life) {
+        this.netBlipAge = -1;
+        this.netBlip.visible = false;
+      } else {
+        const k = this.netBlipAge / life;
+        this.netBlip.scale.setScalar(0.25 + k * 0.9);
+        this.netBlip.material.opacity = 1 - k;
+      }
     }
   }
 }

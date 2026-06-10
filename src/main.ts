@@ -54,6 +54,7 @@ bus.subscribe((e) => {
   hud.onEvent(e);
   for (const trig of cuesForEvent(e, cueCtx)) audio.trigger(trig, sim.currentTier);
   if (e.type === 'CONTACT') rig.onContact(e.evMph, cueCtx.lastGrade ?? 'GOOD');
+  if (e.type === 'NET_HIT') cage.flashNetHit();
   if (e.type === 'TOKEN') goToStation('PLAY');
 });
 

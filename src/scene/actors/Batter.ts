@@ -41,7 +41,7 @@ const BASE: Pose = {
   shinL: [10, 0, 0],
   thighR: [-6, 0, 7],
   shinR: [10, 0, 0],
-  batWrist: [170, 100, -60],
+  batWrist: [150, -25, 85],
 };
 
 function mergePose(over: Pose): Pose {
@@ -243,8 +243,8 @@ export class Batter {
     // IDLE: bat resting up over the RIGHT (rear) shoulder, slow breathing
     // sway. Solved bat dir ≈ (-0.30, 0.90, -0.25): up, over his right side,
     // behind the head plane.
-    const idleA = mergePose({ hips: [0, -4, 0], batWrist: [170, 100, -60] });
-    const idleB = mergePose({ hips: [0, -2, 0], spine: [6, 0, 0], batWrist: [168, 97, -58], head: [-4, 16, 0] });
+    const idleA = mergePose({ hips: [0, -4, 0], batWrist: [150, -25, 85] });
+    const idleB = mergePose({ hips: [0, -2, 0], spine: [6, 0, 0], batWrist: [148, -23, 83], head: [-4, 16, 0] });
     const idle = clipFromPoses('idle', [
       { t: 0, pose: idleA },
       { t: 1.3, pose: idleB },
@@ -266,11 +266,11 @@ export class Batter {
       shinL: [22, 0, 0],
       thighR: [-16, 0, 9],
       shinR: [24, 0, 0],
-      batWrist: [15, 175, -70],
+      batWrist: [50, 180, -50], // near-vertical carry — tip stays in the play frame
     });
     const loadB = mergePose({
       ...loadA,
-      batWrist: [17, 170, -66],
+      batWrist: [52, 175, -47],
       chest: [8, -17, 0],
     });
     const load = clipFromPoses('load', [

@@ -26,6 +26,11 @@ export class GameLoop {
     return (domTimeMs - this.epochMs) / 1000;
   }
 
+  /** Inverse mapping (diagnostics/dev tooling): sim time → DOM timestamp. */
+  domTimeOf(simTimeS: number): number {
+    return this.epochMs + simTimeS * 1000;
+  }
+
   start(): void {
     if (this.running) return;
     this.running = true;
@@ -37,7 +42,13 @@ export class GameLoop {
       let dt = (nowMs - this.lastNowMs) / 1000;
       this.lastNowMs = nowMs;
       if (this.paused) return;
-      if (dt > 0.25) dt = 0.25; // hitch clamp; epoch re-anchors on resume
+      if (dt > 0.25) {
+        // Hitch clamp: drop the excess wall time AND shift the epoch by it,
+        // so the sim↔DOM-timestamp mapping stays consistent under overload
+        // (sim time dilates; it never falls permanently behind the wall).
+        this.epochMs += (dt - 0.25) * 1000;
+        dt = 0.25;
+      }
       this.accumulator += dt;
       while (this.accumulator >= SIM_DT) {
         this.sim.tick();

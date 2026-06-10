@@ -1,37 +1,69 @@
-import type { TierMph } from '../core/types';
-
 /**
- * Non-gameplay bindings. F3 = diagnostics (§Inputs, permanent).
+ * Non-gameplay bindings (§Inputs — UI affordances, permitted by fence 1):
+ * arrows = station/panel focus · ENTER mirrors SPACE for confirms · TAB =
+ * stats monitor · ESC = back to play (the system sheet is M3) · M = mute ·
+ * H/B = handedness/bat accelerators · F3 = diagnostics.
  *
- * M0-DEBUG: digits 1–6 select the machine tier and R inserts a token. The
- * shipped game forbids direct tier-select keys (they bypass the diegetic
- * panel, §Inputs) — these exist only because M0 has no panel yet. Remove in
- * M1/M3 when the machine control panel and token slot land.
+ * M0-DEBUG retired in M1: digit tier keys are GONE (the diegetic machine
+ * panel replaces them, §UX). R-token remains until M3's token slot station.
  */
-const TIER_KEYS: Record<string, TierMph> = {
-  Digit1: 40,
-  Digit2: 50,
-  Digit3: 60,
-  Digit4: 70,
-  Digit5: 80,
-  Digit6: 90,
+export interface UiKeyHandlers {
+  onArrow: (dir: 'up' | 'down' | 'left' | 'right') => void;
+  onEnter: () => void;
+  onTab: () => void;
+  onEscape: () => void;
+  onMute: () => void;
+  onHandedness: () => void;
+  onBat: () => void;
+  onToken: () => void; // M0-DEBUG (the token slot station arrives in M3)
+  onToggleDiagnostics: () => void;
+}
+
+const ARROWS: Record<string, 'up' | 'down' | 'left' | 'right'> = {
+  ArrowUp: 'up',
+  ArrowDown: 'down',
+  ArrowLeft: 'left',
+  ArrowRight: 'right',
 };
 
-export function attachUiKeys(opts: {
-  onTierSelect: (tier: TierMph) => void; // M0-DEBUG
-  onToken: () => void; // M0-DEBUG (the token slot arrives in M3)
-  onToggleDiagnostics: () => void;
-}): () => void {
+export function attachUiKeys(h: UiKeyHandlers): () => void {
   const handler = (e: KeyboardEvent) => {
     if (e.repeat) return;
-    if (e.code === 'F3') {
+    const arrow = ARROWS[e.code];
+    if (arrow) {
       e.preventDefault();
-      opts.onToggleDiagnostics();
-    } else if (e.code === 'KeyR') {
-      opts.onToken();
-    } else {
-      const tier = TIER_KEYS[e.code];
-      if (tier) opts.onTierSelect(tier);
+      h.onArrow(arrow);
+      return;
+    }
+    switch (e.code) {
+      case 'F3':
+        e.preventDefault();
+        h.onToggleDiagnostics();
+        break;
+      case 'Enter':
+        h.onEnter();
+        break;
+      case 'Tab':
+        e.preventDefault();
+        h.onTab();
+        break;
+      case 'Escape':
+        h.onEscape();
+        break;
+      case 'KeyM':
+        h.onMute();
+        break;
+      case 'KeyH':
+        h.onHandedness();
+        break;
+      case 'KeyB':
+        h.onBat();
+        break;
+      case 'KeyR':
+        h.onToken();
+        break;
+      default:
+        break;
     }
   };
   window.addEventListener('keydown', handler);

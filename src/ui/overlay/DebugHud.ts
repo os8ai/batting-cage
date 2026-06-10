@@ -1,12 +1,13 @@
 import type { DomainEvent, SwingRecord, TierMph } from '../../core/types';
 
 /**
- * M0-DEBUG HUD — disposable HTML standing in for the M1 LED board. Prints the
- * full §6/§7 output chain per swing: signed ms readout ("LATE 23 ms"), grade,
- * spray tag, EV, LA, and the carry headline. Replaced by the diegetic
- * dot-matrix board in M1; intentionally unstyled beyond legibility.
+ * Dev fallback HUD (demoted in M1 per plan §2): the LED board now owns the
+ * swing card; this HTML mirror is hidden by default and toggled with F3
+ * alongside diagnostics. Fully removed in M3 with the complete board pages.
  */
 export class DebugHud {
+  visible = false;
+
   private root: HTMLDivElement;
   private status: HTMLDivElement;
   private card: HTMLDivElement;
@@ -17,13 +18,13 @@ export class DebugHud {
   constructor(parent: HTMLElement) {
     this.root = document.createElement('div');
     this.root.style.cssText =
-      'position:fixed;left:12px;top:12px;color:#eee;font:14px/1.5 monospace;z-index:20;' +
-      'text-shadow:0 1px 2px #000;user-select:none;pointer-events:none';
+      'position:fixed;left:12px;bottom:12px;color:#9aa;font:12px/1.4 monospace;z-index:20;' +
+      'text-shadow:0 1px 2px #000;user-select:none;pointer-events:none;display:none';
     this.root.innerHTML =
       '<div data-id="status"></div>' +
-      '<div data-id="card" style="margin-top:6px;font-size:18px;white-space:pre"></div>' +
-      '<div data-id="strip" style="margin-top:6px;color:#9ab"></div>' +
-      '<div style="margin-top:10px;color:#789">[SPACE] swing &nbsp;[R] token &nbsp;[1-6] speed (idle) &nbsp;[F3] diag</div>';
+      '<div data-id="card" style="margin-top:4px;font-size:13px;white-space:pre"></div>' +
+      '<div data-id="strip" style="margin-top:4px;color:#789"></div>' +
+      '<div style="margin-top:6px;color:#678">[SPACE] swing/confirm · [R] token · [arrows] panel · [TAB] stats · [H] hand · [B] bat · [M] mute</div>';
     parent.appendChild(this.root);
     this.status = this.root.querySelector('[data-id=status]')!;
     this.card = this.root.querySelector('[data-id=card]')!;
@@ -35,6 +36,11 @@ export class DebugHud {
   setTier(tier: TierMph): void {
     this.tier = tier;
     this.status.textContent = `MACHINE ${tier} MPH — PRESS R TO INSERT TOKEN`;
+  }
+
+  toggle(): void {
+    this.visible = !this.visible;
+    this.root.style.display = this.visible ? 'block' : 'none';
   }
 
   onEvent(e: DomainEvent): void {

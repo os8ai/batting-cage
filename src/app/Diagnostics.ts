@@ -1,4 +1,8 @@
-/** F3 diagnostics data (§Inputs output g): fps, frame time, input→judgment latency. */
+/**
+ * F3 diagnostics (§Inputs output g): fps, frame time, input→judgment latency,
+ * plus renderer.info counters (M1 E4 — draw calls / triangles / GPU memory
+ * proxies, continuously observable against the §12 scene budgets).
+ */
 export class Diagnostics {
   visible = false;
 
@@ -6,6 +10,11 @@ export class Diagnostics {
   private lastFrameAt = 0;
   lastJudgeLatencyMs = 0;
   maxJudgeLatencyMs = 0;
+
+  private drawCalls = 0;
+  private triangles = 0;
+  private geometries = 0;
+  private textures = 0;
 
   private el: HTMLDivElement;
   private lastDraw = 0;
@@ -25,6 +34,13 @@ export class Diagnostics {
     this.el.style.display = this.visible ? 'block' : 'none';
   }
 
+  setRenderInfo(info: { render: { calls: number; triangles: number }; memory: { geometries: number; textures: number } }): void {
+    this.drawCalls = info.render.calls;
+    this.triangles = info.render.triangles;
+    this.geometries = info.memory.geometries;
+    this.textures = info.memory.textures;
+  }
+
   frame(now: number): void {
     if (this.lastFrameAt > 0) {
       this.frameTimes.push(now - this.lastFrameAt);
@@ -34,12 +50,17 @@ export class Diagnostics {
     if (this.visible && now - this.lastDraw > 250) {
       this.lastDraw = now;
       const avg = this.frameTimes.reduce((a, b) => a + b, 0) / Math.max(1, this.frameTimes.length);
+      const sorted = [...this.frameTimes].sort((a, b) => a - b);
+      const p99 = sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.99))] ?? 0;
       const fps = avg > 0 ? 1000 / avg : 0;
       this.el.textContent =
         `fps            ${fps.toFixed(1)}\n` +
-        `frame time     ${avg.toFixed(2)} ms\n` +
+        `frame time     ${avg.toFixed(2)} ms (p99 ${p99.toFixed(2)})\n` +
         `judge latency  ${this.lastJudgeLatencyMs.toFixed(3)} ms\n` +
-        `judge max      ${this.maxJudgeLatencyMs.toFixed(3)} ms`;
+        `judge max      ${this.maxJudgeLatencyMs.toFixed(3)} ms\n` +
+        `draw calls     ${this.drawCalls}\n` +
+        `triangles      ${(this.triangles / 1000).toFixed(1)}k\n` +
+        `geo/tex        ${this.geometries}/${this.textures}`;
     }
   }
 

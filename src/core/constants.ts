@@ -122,15 +122,9 @@ export const GRACE_S = 0.2;
 
 export const TIERS: readonly TierMph[] = [40, 50, 60, 70, 80, 90];
 
-/** Per-tier grade windows, |ε| ms (§6, TUNABLE — launch values). */
-export const WINDOWS_MS: Record<TierMph, { P: number; GR: number; GD: number; FL: number }> = {
-  40: { P: 40, GR: 80, GD: 120, FL: 160 },
-  50: { P: 35, GR: 70, GD: 105, FL: 145 },
-  60: { P: 30, GR: 60, GD: 90, FL: 130 },
-  70: { P: 25, GR: 50, GD: 75, FL: 115 },
-  80: { P: 20, GR: 40, GD: 60, FL: 100 },
-  90: { P: 15, GR: 30, GD: 45, FL: 85 },
-};
+// Per-tier grade windows (§6, TUNABLE) live in core/tuning.ts behind the M4
+// tuning rig; re-exported here so call sites keep their single source.
+export { WINDOWS_MS } from './tuning';
 
 /** Contact-quality anchors: q(0)→q(W_P)→q(W_GR)→q(W_GD), piecewise linear (§6). */
 export const Q_ANCHORS = { q0: 1.0, qP: 0.95, qGR: 0.82, qGD: 0.65 } as const;
@@ -155,23 +149,10 @@ export const SPRAY_JITTER_DEG = 2; // cannot flip fair/foul across the 6° guard
 export const SPRAY_CENTER_TAG_DEG = 8; // |φ| ≤ 8° CENTER, else PULL / OPPO
 
 // ---------------------------------------------------------------------------
-// Scoring & progression tables (SPEC §8). Stored at the single source now;
-// consumed by rules/scoring.ts & rules/progression.ts in M3.
+// Scoring & progression tables (SPEC §8, TUNABLE) — live in core/tuning.ts
+// behind the M4 tuning rig; re-exported here as the single consumer source.
 // ---------------------------------------------------------------------------
-export const POINT_MULTIPLIERS = { PERFECT: 1.6, GREAT: 1.25, GOOD: 1.0 } as const;
-export const FOUL_POINTS = 25;
-
-export const MEDAL_THRESHOLDS: Record<
-  TierMph,
-  { bronze: number; silver: number; gold: number; platinum: number; platinumCarryFt: number }
-> = {
-  40: { bronze: 1800, silver: 3200, gold: 4600, platinum: 5800, platinumCarryFt: 2800 },
-  50: { bronze: 1900, silver: 3400, gold: 4900, platinum: 6100, platinumCarryFt: 2950 },
-  60: { bronze: 2000, silver: 3600, gold: 5200, platinum: 6400, platinumCarryFt: 3100 },
-  70: { bronze: 2100, silver: 3800, gold: 5500, platinum: 6800, platinumCarryFt: 3300 },
-  80: { bronze: 2200, silver: 4000, gold: 5800, platinum: 7100, platinumCarryFt: 3450 },
-  90: { bronze: 2300, silver: 4200, gold: 6100, platinum: 7500, platinumCarryFt: 3600 },
-};
+export { POINT_MULTIPLIERS, FOUL_POINTS, MEDAL_THRESHOLDS } from './tuning';
 
 export const DISTANCE_CLUBS_FT: readonly number[] = [250, 300, 350, 400];
 

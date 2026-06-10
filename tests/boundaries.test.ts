@@ -42,6 +42,27 @@ describe('core purity (import boundaries)', () => {
     });
   }
 
+  it('lil-gui never reaches dist-bound code — TunePanel is the only importer, loaded dev-only (M4 P0.4)', () => {
+    // Triple fence #1 (M4-PLAN risk 3): the only static `lil-gui` import in
+    // src/ is app/TunePanel.ts, and TunePanel itself is only ever imported
+    // dynamically behind a statically-false-in-build `import.meta.env.DEV`
+    // guard — so `vite build` drops both from dist/.
+    const SRC_DIR = resolve(CORE_DIR, '..');
+    for (const file of tsFilesUnder(SRC_DIR)) {
+      const src = readFileSync(file, 'utf8');
+      if (/from\s+['"]lil-gui['"]/.test(src)) {
+        expect(file.endsWith('app/TunePanel.ts'), `static lil-gui import in ${file}`).toBe(true);
+      }
+      if (/from\s+['"][^'"]*TunePanel['"]/.test(src)) {
+        expect.fail(`static TunePanel import in ${file} — must stay a dev-gated dynamic import`);
+      }
+      if (/import\(['"][^'"]*TunePanel['"]\)/.test(src)) {
+        expect(/import\.meta\.env\.DEV[^\n]*\n[^\n]*TunePanel/.test(src) || /import\.meta\.env\.DEV/.test(src),
+          `dynamic TunePanel import in ${file} lacks the import.meta.env.DEV gate`).toBe(true);
+      }
+    }
+  });
+
   it('sim.ts never reaches cloth.ts — one-way coupling is structural (M2 E6)', () => {
     // §Architecture: "gameplay outcomes never read cloth state". The cloth
     // solver lives in core for purity/testability, but only presentation

@@ -473,6 +473,13 @@ window.addEventListener('resize', () => {
   rig.resize(window.innerWidth / window.innerHeight);
 });
 
+// Dev-only tuning panel (?tune=1, M4): the env guard is statically false in
+// `vite build`, so the dynamic chunk — and lil-gui with it — never reaches
+// dist/ (triple-fenced: env gate, devDependency, load-budget grep).
+if (import.meta.env.DEV && new URLSearchParams(window.location.search).has('tune')) {
+  void import('./app/TunePanel').then((m) => m.mountTunePanel());
+}
+
 // Dev/CI hook (?dev=1): exposes the works for the scripted smoke/acceptance runs.
 if (new URLSearchParams(window.location.search).has('dev')) {
   (window as unknown as Record<string, unknown>).__bc = {

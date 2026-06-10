@@ -82,6 +82,24 @@ export const GUARD_TOP_M = 1.9;
 export const BOUNCE_EVENT_MIN_VY_MPS = 2.0;
 
 // ---------------------------------------------------------------------------
+// Verlet cloth (SPEC §11; M2). Visual-only physics — presentation steps it;
+// the sim never reads it. All TUNABLE within the M2 exit checks (believable
+// reaction across the EV range, no instability at a 102 EV impulse).
+// ---------------------------------------------------------------------------
+export const CLOTH_HZ = 60;
+export const CLOTH_DT = 1 / CLOTH_HZ;
+export const CLOTH_SUBSTEPS = 2;
+export const CLOTH_CONSTRAINT_PASSES = 2;
+export const CLOTH_DAMPING = 0.02; // per-substep velocity damping (air)
+export const CLOTH_NODE_PITCH_M = 0.35; // wall panels (§11 "node pitch ~0.35 m")
+export const CLOTH_CEILING_PITCH_M = 0.5; // ceiling strip, coarser
+/** Injected node velocity is clamped so a 102 EV rope deforms ~0.5–0.7 m
+ * without tunneling (M2-PLAN §3.4; solver proven stable at 50 m/s headless). */
+export const CLOTH_IMPULSE_MAX_MPS = 34;
+/** settleEnergy below this = panel at rest (normals recompute can skip). */
+export const CLOTH_REST_ENERGY = 2e-5;
+
+// ---------------------------------------------------------------------------
 // The pitch clock (SPEC §5): one fixed 7.5 s cycle, every tier, no jitter.
 // ---------------------------------------------------------------------------
 export const CYCLE_S = 7.5;

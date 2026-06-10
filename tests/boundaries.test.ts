@@ -41,4 +41,26 @@ describe('core purity (import boundaries)', () => {
       }
     });
   }
+
+  it('sim.ts never reaches cloth.ts — one-way coupling is structural (M2 E6)', () => {
+    // §Architecture: "gameplay outcomes never read cloth state". The cloth
+    // solver lives in core for purity/testability, but only presentation
+    // (scene/actors/Net.ts) may import it: walk sim.ts's import closure.
+    const clothPath = join(CORE_DIR, 'physics', 'cloth.ts');
+    const seen = new Set<string>();
+    const queue = [join(CORE_DIR, 'sim.ts')];
+    while (queue.length > 0) {
+      const file = queue.pop()!;
+      if (seen.has(file)) continue;
+      seen.add(file);
+      expect(file, 'core/sim.ts transitively imports cloth.ts').not.toBe(clothPath);
+      const src = readFileSync(file, 'utf8');
+      for (const m of src.matchAll(/(?:from|import)\s+['"](\.[^'"]+)['"]/g)) {
+        let target = resolve(dirname(file), m[1]!);
+        if (!target.endsWith('.ts')) target += '.ts';
+        queue.push(target);
+      }
+    }
+    expect(seen.size).toBeGreaterThan(5); // the walk really traversed the core
+  });
 });

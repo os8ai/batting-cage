@@ -52,6 +52,10 @@ export class CageScene {
   private focusRing: THREE.Mesh;
   private netBlip: THREE.Sprite;
   private netBlipAge = -1;
+  private trail: THREE.Points;
+  private trailAges: Float32Array;
+  private trailCursor = 0;
+  private trailOn = false;
   private rackBats: Record<'WOOD' | 'METAL', THREE.Object3D>;
   private netUniforms = { uTime: { value: 0 } };
 
@@ -130,6 +134,38 @@ export class CageScene {
     );
     this.netBlip.visible = false;
     this.scene.add(this.netBlip);
+
+    // Batted-ball tracer: a short-lived additive point trail so the launch
+    // arc reads against the dark facility (owner playtest: the rise to the
+    // ceiling net was imperceptible). One draw call; off during the pitch.
+    const TRAIL_N = 22;
+    this.trailAges = new Float32Array(TRAIL_N).fill(1);
+    const trailGeo = new THREE.BufferGeometry();
+    trailGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(TRAIL_N * 3), 3));
+    trailGeo.setAttribute('aAge', new THREE.BufferAttribute(this.trailAges, 1));
+    const trailMat = new THREE.ShaderMaterial({
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      vertexShader:
+        'attribute float aAge; varying float vA;\n' +
+        'void main() {\n' +
+        '  vA = max(0.0, 1.0 - aAge);\n' +
+        '  vec4 mv = modelViewMatrix * vec4(position, 1.0);\n' +
+        '  gl_PointSize = vA * 260.0 / max(1.0, -mv.z);\n' +
+        '  gl_Position = projectionMatrix * mv;\n' +
+        '}',
+      fragmentShader:
+        'varying float vA;\n' +
+        'void main() {\n' +
+        '  float d = length(gl_PointCoord - 0.5) * 2.0;\n' +
+        '  float a = smoothstep(1.0, 0.2, d) * vA * 0.4;\n' +
+        '  gl_FragColor = vec4(1.0, 0.96, 0.86, a);\n' +
+        '}',
+    });
+    this.trail = new THREE.Points(trailGeo, trailMat);
+    this.trail.frustumCulled = false;
+    this.scene.add(this.trail);
 
     // Focus highlight ring (station selection cue, §UX).
     this.focusRing = new THREE.Mesh(
@@ -472,13 +508,13 @@ export class CageScene {
     // Display bats: simple cylinders standing in the rack (the held bat is
     // the batter's prop; the rack shows the spare).
     const woodBat = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.03, 0.014, 0.84, 10),
+      new THREE.CylinderGeometry(0.03, 0.014, 0.74, 10),
       new THREE.MeshStandardMaterial({ color: 0xa9742f, roughness: 0.55 })
     );
     woodBat.position.set(-0.12, -0.02, 0.07);
     rack.add(woodBat);
     const metalBat = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.03, 0.015, 0.84, 10),
+      new THREE.CylinderGeometry(0.03, 0.015, 0.74, 10),
       new THREE.MeshStandardMaterial({ color: 0xc3c8cf, roughness: 0.3, metalness: 0.85 })
     );
     metalBat.position.set(0.12, -0.02, 0.07);
@@ -501,6 +537,12 @@ export class CageScene {
     this.batter.setBat(b);
     this.rackBats.WOOD.visible = b !== 'WOOD';
     this.rackBats.METAL.visible = b !== 'METAL';
+  }
+
+  /** Batted-flight tracer on/off (CONTACT → on; FEED/settle → off). */
+  setBattedTrail(on: boolean): void {
+    this.trailOn = on;
+    if (!on) this.trailAges.fill(1);
   }
 
   /** NET_HIT cue — flash at the ball's current render position. */
@@ -535,11 +577,28 @@ export class CageScene {
     if (visible) {
       this.ball.position.lerpVectors(this.prev, this.curr, alpha);
       this.ballShadow.position.set(this.ball.position.x, 0.012, this.ball.position.z);
+      // Shadow fades out fast with height: a strong blob sliding along the
+      // turf under a high ball reads as the BALL skimming the ground (owner
+      // playtest). The pitch (≤ ~1.2 m) keeps its depth cue; high batted
+      // balls lose the blob entirely.
       const h = Math.max(0, this.ball.position.y);
-      const s = 1 + h * 0.35;
-      this.ballShadow.scale.setScalar(s);
-      (this.ballShadow.material as THREE.MeshBasicMaterial).opacity = Math.max(0.08, 0.4 - h * 0.045);
+      this.ballShadow.scale.setScalar(1 + h * 0.18);
+      (this.ballShadow.material as THREE.MeshBasicMaterial).opacity = Math.max(0, 0.38 - h * 0.13);
     }
+
+    // Tracer: drop a point at the ball each frame while the batted flight is
+    // live; points fade over ~0.3 s.
+    for (let i = 0; i < this.trailAges.length; i++) {
+      if (this.trailAges[i]! < 1) this.trailAges[i] = Math.min(1, this.trailAges[i]! + dt / 0.3);
+    }
+    if (this.trailOn && visible) {
+      const pos = this.trail.geometry.attributes.position as THREE.BufferAttribute;
+      pos.setXYZ(this.trailCursor, this.ball.position.x, this.ball.position.y, this.ball.position.z);
+      this.trailAges[this.trailCursor] = 0;
+      this.trailCursor = (this.trailCursor + 1) % this.trailAges.length;
+      pos.needsUpdate = true;
+    }
+    (this.trail.geometry.attributes.aAge as THREE.BufferAttribute).needsUpdate = true;
 
     for (let i = 0; i < this.settledBalls.length; i++) {
       const mesh = this.settledBalls[i]!;

@@ -206,17 +206,18 @@ export class Batter {
   private buildBat(kind: BatChoice): THREE.Group {
     const g = new THREE.Group();
     const profile: THREE.Vector2[] = [];
-    // Knob → handle → taper → barrel (34 in ≈ 0.86 m).
+    // Knob → handle → taper → barrel. A true 34 in bat reads overlong on the
+    // stylized rig (owner playtest) — scaled to ~0.76 m (30 in).
     const pts: Array<[number, number]> = [
       [0.018, 0],
-      [0.025, 0.012],
-      [0.014, 0.03],
-      [0.013, 0.28],
-      [0.022, 0.5],
-      [0.033, 0.68],
-      [0.034, 0.84],
-      [0.028, 0.86],
-      [0, 0.865],
+      [0.025, 0.011],
+      [0.014, 0.027],
+      [0.013, 0.25],
+      [0.022, 0.44],
+      [0.033, 0.6],
+      [0.034, 0.74],
+      [0.028, 0.755],
+      [0, 0.76],
     ];
     for (const [r, y] of pts) profile.push(new THREE.Vector2(r, y));
     const geo = new THREE.LatheGeometry(profile, 14);
@@ -253,11 +254,13 @@ export class Batter {
 
     // LOAD: crouched anticipation, hands by the rear shoulder, bat cocked up
     // over the right shoulder (solved dir ≈ (-0.40, 0.82, -0.40)).
+    // Coil kept shallow (hips −12°): the deep coil carried the hands/bat out
+    // of the play frame's left edge (owner playtest).
     const loadA = mergePose({
-      hips: [0, -22, 0],
-      spine: [10, -10, 0],
-      chest: [8, -14, 0],
-      head: [-8, 38, 0],
+      hips: [0, -12, 0],
+      spine: [10, -6, 0],
+      chest: [8, -8, 0],
+      head: [-8, 28, 0],
       shoulderL: [0, 0, -62],
       elbowL: [-55, 0, -28],
       shoulderR: [-10, 0, -28],
@@ -266,12 +269,12 @@ export class Batter {
       shinL: [22, 0, 0],
       thighR: [-16, 0, 9],
       shinR: [24, 0, 0],
-      batWrist: [50, 180, -50], // near-vertical carry — tip stays in the play frame
+      batWrist: [-145, 110, -85], // near-vertical carry, tip in frame
     });
     const loadB = mergePose({
       ...loadA,
-      batWrist: [52, 175, -47],
-      chest: [8, -17, 0],
+      batWrist: [-142, 106, -82],
+      chest: [8, -11, 0],
     });
     const load = clipFromPoses('load', [
       { t: 0, pose: loadA },

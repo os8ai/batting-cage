@@ -53,8 +53,12 @@ bus.subscribe((e) => {
   cage.batter.onEvent(e);
   hud.onEvent(e);
   for (const trig of cuesForEvent(e, cueCtx)) audio.trigger(trig, sim.currentTier);
-  if (e.type === 'CONTACT') rig.onContact(e.evMph, cueCtx.lastGrade ?? 'GOOD');
+  if (e.type === 'CONTACT') {
+    rig.onContact(e.evMph, cueCtx.lastGrade ?? 'GOOD');
+    cage.setBattedTrail(true);
+  }
   if (e.type === 'NET_HIT') cage.flashNetHit();
+  if (e.type === 'FEED' || e.type === 'BALL_SETTLED' || e.type === 'ROUND_END') cage.setBattedTrail(false);
   if (e.type === 'TOKEN') goToStation('PLAY');
 });
 

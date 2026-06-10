@@ -13,9 +13,6 @@ export class Lighting {
   /** Fixture housings to include in the selective-bloom pass. */
   readonly glowMeshes: THREE.Mesh[] = [];
 
-  private motes: THREE.Points;
-  private moteData: Float32Array;
-  private moteSeeds: Float32Array;
 
   constructor() {
     // Near-dark base so the facility never goes fully black.
@@ -79,57 +76,11 @@ export class Lighting {
       this.group.add(pool, pool.target);
     }
 
-    // Dust motes in the two shadow-casting beams (GPU-friendly point cloud).
-    const COUNT = 360;
-    this.moteData = new Float32Array(COUNT * 3);
-    this.moteSeeds = new Float32Array(COUNT * 2);
-    const beamZ = [2 * FT_TO_M, 42 * FT_TO_M];
-    for (let i = 0; i < COUNT; i++) {
-      const beam = beamZ[i % 2]!;
-      this.moteSeeds[i * 2] = Math.sin(i * 12.9898) * 43758.5453 - Math.floor(Math.sin(i * 12.9898) * 43758.5453);
-      this.moteSeeds[i * 2 + 1] = beam;
-      this.resetMote(i, (i / COUNT) * fixtureY);
-    }
-    const moteGeo = new THREE.BufferGeometry();
-    moteGeo.setAttribute('position', new THREE.BufferAttribute(this.moteData, 3));
-    this.motes = new THREE.Points(
-      moteGeo,
-      new THREE.PointsMaterial({
-        color: 0xfff4dd,
-        size: 0.014,
-        transparent: true,
-        opacity: 0.5,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-        sizeAttenuation: true,
-      })
-    );
-    this.group.add(this.motes);
+    // (Dust motes were tried here and cut — they read as falling snow on the
+    // dark facility backdrop. Owner playtest, M1.)
   }
 
-  private resetMote(i: number, y: number): void {
-    const s = this.moteSeeds[i * 2]!;
-    const beamZ = this.moteSeeds[i * 2 + 1]!;
-    const r = 0.15 + s * 1.3 * (y / 5);
-    const ang = s * 73.137 + i;
-    this.moteData[i * 3] = Math.cos(ang) * r * 0.45;
-    this.moteData[i * 3 + 1] = y;
-    this.moteData[i * 3 + 2] = beamZ + Math.sin(ang) * r * 0.45;
-  }
-
-  /** Slow downward drift with re-spawn at the fixture — called per frame. */
-  update(dt: number, timeS: number): void {
-    const n = this.moteData.length / 3;
-    for (let i = 0; i < n; i++) {
-      const s = this.moteSeeds[i * 2]!;
-      let y = this.moteData[i * 3 + 1]! - dt * (0.05 + s * 0.06);
-      this.moteData[i * 3] = this.moteData[i * 3]! + Math.sin(timeS * 0.6 + i) * dt * 0.012;
-      if (y < 0.1) {
-        y = 5;
-        this.resetMote(i, y);
-      }
-      this.moteData[i * 3 + 1] = y;
-    }
-    this.motes.geometry.attributes.position!.needsUpdate = true;
+  update(_dt: number, _timeS: number): void {
+    // No per-frame lighting animation in M1.
   }
 }

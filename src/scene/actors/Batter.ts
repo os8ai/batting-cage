@@ -20,21 +20,28 @@ interface Pose {
 
 const D = Math.PI / 180;
 
-/** Base athletic stance every pose is layered on (local +z faces the plate side, +x faces the machine). */
+/**
+ * Base athletic stance every pose is layered on. Rig-local axes: +z = toward
+ * the plate (chest normal), +x = the batter's LEFT (lead side, toward the
+ * machine), −x = his RIGHT (rear side, toward the catcher). Hands sit at the
+ * REAR (right) shoulder — righty bat carry; the lead arm crosses the chest
+ * to the grip. All batWrist values are numerically solved for target bat
+ * directions (see M1-NOTES; solver in the repo history).
+ */
 const BASE: Pose = {
   hips: [0, 0, 0],
   spine: [4, 0, 0],
   chest: [4, 0, 0],
   head: [-6, 18, 0],
-  shoulderL: [0, 0, -68],
-  elbowL: [0, 0, -55],
-  shoulderR: [0, 0, 64],
-  elbowR: [0, 0, 58],
+  shoulderL: [0, 0, -55], // lead arm crosses toward the rear shoulder
+  elbowL: [-50, 0, -30],
+  shoulderR: [0, 0, -20], // rear upper arm stays on his right side
+  elbowR: [-115, 0, 0], // forearm folds up — wrist at the right shoulder
   thighL: [-6, 0, -7],
   shinL: [10, 0, 0],
   thighR: [-6, 0, 7],
   shinR: [10, 0, 0],
-  batWrist: [0, 0, 0],
+  batWrist: [170, 100, -60],
 };
 
 function mergePose(over: Pose): Pose {
@@ -233,36 +240,37 @@ export class Batter {
   // -- clips ------------------------------------------------------------------
 
   private buildClips(): Record<'idle' | 'load' | 'swing' | 'reaction', THREE.AnimationClip> {
-    // IDLE: bat resting up over the rear shoulder, slow breathing sway.
-    // (Wrist angles solved numerically — bat dir ≈ (-0.30, 0.92, -0.25) in
-    // rig space: up, toward the catcher, behind the head plane.)
-    const idleA = mergePose({ hips: [0, -4, 0], batWrist: [-120, -30, -40] });
-    const idleB = mergePose({ hips: [0, -2, 0], spine: [6, 0, 0], batWrist: [-114, -28, -38], head: [-4, 16, 0] });
+    // IDLE: bat resting up over the RIGHT (rear) shoulder, slow breathing
+    // sway. Solved bat dir ≈ (-0.30, 0.90, -0.25): up, over his right side,
+    // behind the head plane.
+    const idleA = mergePose({ hips: [0, -4, 0], batWrist: [170, 100, -60] });
+    const idleB = mergePose({ hips: [0, -2, 0], spine: [6, 0, 0], batWrist: [168, 97, -58], head: [-4, 16, 0] });
     const idle = clipFromPoses('idle', [
       { t: 0, pose: idleA },
       { t: 1.3, pose: idleB },
       { t: 2.6, pose: idleA },
     ]);
 
-    // LOAD: crouched anticipation, hands back toward the catcher, bat waggle.
+    // LOAD: crouched anticipation, hands by the rear shoulder, bat cocked up
+    // over the right shoulder (solved dir ≈ (-0.40, 0.82, -0.40)).
     const loadA = mergePose({
       hips: [0, -22, 0],
       spine: [10, -10, 0],
       chest: [8, -14, 0],
       head: [-8, 38, 0],
-      shoulderL: [0, -18, -52],
-      elbowL: [0, 0, -62],
-      shoulderR: [0, 14, 76],
-      elbowR: [0, 0, 44],
+      shoulderL: [0, 0, -62],
+      elbowL: [-55, 0, -28],
+      shoulderR: [-10, 0, -28],
+      elbowR: [-125, 0, 0],
       thighL: [-14, 0, -9],
       shinL: [22, 0, 0],
       thighR: [-16, 0, 9],
       shinR: [24, 0, 0],
-      batWrist: [-90, -40, -45], // cocked up BEHIND the head (solved: dir ≈ (-0.45, 0.79, -0.41))
+      batWrist: [15, 175, -70],
     });
     const loadB = mergePose({
       ...loadA,
-      batWrist: [-97, -36, -42],
+      batWrist: [17, 170, -66],
       chest: [8, -17, 0],
     });
     const load = clipFromPoses('load', [
@@ -272,42 +280,46 @@ export class Batter {
     ]);
 
     // SWING: load → stride → CONTACT (t = 0.21 s, the metadata anchor) →
-    // extension. Hips lead, chest follows, arms whip the bat level.
+    // extension. Hips lead, chest follows; at contact both arms extend
+    // toward the plate and the bat sweeps LEVEL (solved dir ≈
+    // (0.35, 0.00, 0.94) — horizontal, barrel over the plate), wrapping
+    // around to the lead side on the follow-through.
     const stride = mergePose({
       ...loadA,
       hips: [0, -8, 0],
       thighL: [-22, 0, -9],
-      batWrist: [-70, -35, -30], // uncocking on the way to contact
+      elbowR: [-120, 0, 0],
+      batWrist: [65, 30, 75], // uncocking — barrel dropping toward the plane
     });
     const contact = mergePose({
       hips: [0, 38, 0],
       spine: [6, 26, 0],
       chest: [4, 30, 0],
       head: [-6, 10, 0],
-      shoulderL: [0, 24, -34],
-      elbowL: [0, 0, -10],
-      shoulderR: [0, -20, 30],
-      elbowR: [0, 0, 8],
+      shoulderL: [-75, 0, -15], // both arms extended toward the plate
+      elbowL: [-10, 0, 0],
+      shoulderR: [-75, 0, 15],
+      elbowR: [-15, 0, 0],
       thighL: [-10, 0, -16],
       shinL: [6, 0, 0],
       thighR: [-2, 0, 22],
       shinR: [30, 0, 0],
-      batWrist: [62, 6, -8],
+      batWrist: [-5, 165, -70],
     });
     const extension = mergePose({
       hips: [0, 78, 0],
       spine: [2, 48, 0],
       chest: [0, 52, 0],
       head: [-4, -16, 0],
-      shoulderL: [0, 42, -52],
-      elbowL: [0, 0, -44],
-      shoulderR: [0, -36, 46],
-      elbowR: [0, 0, 30],
+      shoulderL: [-65, 0, -35],
+      elbowL: [-25, 0, 0],
+      shoulderR: [-70, 0, 30],
+      elbowR: [-20, 0, 0],
       thighL: [-8, 0, -18],
       shinL: [4, 0, 0],
       thighR: [4, 0, 30],
       shinR: [38, 0, 0],
-      batWrist: [96, 30, -2],
+      batWrist: [-50, 175, -85], // wrapped around the lead shoulder
     });
     const swing = clipFromPoses('swing', [
       { t: 0, pose: loadA },
@@ -320,9 +332,9 @@ export class Batter {
     const hold = mergePose({
       ...extension,
       head: [-10, -30, 0],
-      batWrist: [104, 42, 0],
+      batWrist: [-55, 170, -85],
     });
-    const settle = mergePose({ hips: [0, 24, 0], spine: [4, 12, 0], chest: [4, 12, 0], head: [-6, 6, 0], batWrist: [-6, 0, 6] });
+    const settle = mergePose({ hips: [0, 24, 0], spine: [4, 12, 0], chest: [4, 12, 0], head: [-6, 6, 0] });
     const reaction = clipFromPoses('reaction', [
       { t: 0, pose: hold },
       { t: 0.55, pose: hold },

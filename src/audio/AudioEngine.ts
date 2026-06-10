@@ -3,13 +3,23 @@ import { TIERS } from '../core/constants';
 import type { TierMph } from '../core/types';
 import type { CueTrigger } from './cueMap';
 import {
+  backstopThud,
+  boardTick,
   feedClunk,
+  frameClang,
+  guardRattle,
   metalPing,
+  netRustle,
   panelClick,
   perfectThump,
   releaseThwip,
+  roomTone,
   tokenClink,
+  turfBounce,
+  turfRollLoop,
+  whiffSwish,
   whirrLoop,
+  whooshLoop,
   woodCrack,
 } from './synth';
 
@@ -40,12 +50,45 @@ class Emitter {
   }
 }
 
+/** Roving one-shot pool: each voice has its own Object3D so concurrent
+ * impacts sound from their own positions (M2 §10 spatial one-shots). */
+class RovingEmitter {
+  readonly group = new THREE.Group();
+  private voices: Array<{ holder: THREE.Object3D; audio: THREE.PositionalAudio }> = [];
+  private next = 0;
+
+  constructor(listener: THREE.AudioListener, size: number, refDistance: number) {
+    for (let i = 0; i < size; i++) {
+      const holder = new THREE.Object3D();
+      const audio = new THREE.PositionalAudio(listener);
+      audio.setRefDistance(refDistance);
+      audio.setRolloffFactor(1.1);
+      holder.add(audio);
+      this.group.add(holder);
+      this.voices.push({ holder, audio });
+    }
+  }
+
+  playAt(buffer: AudioBuffer, x: number, y: number, z: number, volume = 1, rate = 1): void {
+    const v = this.voices[this.next]!;
+    this.next = (this.next + 1) % this.voices.length;
+    v.holder.position.set(x, y, z);
+    if (v.audio.isPlaying) v.audio.stop();
+    v.audio.setBuffer(buffer);
+    v.audio.setVolume(volume);
+    v.audio.setPlaybackRate(rate);
+    v.audio.play();
+  }
+}
+
 /**
  * One splash-unlocked AudioContext; all cues are synthesized buffers played
- * through three.js PositionalAudio at the machine / plate / panel anchors
- * (§How: Web Audio directly, no Howler). The whirr loop is the §5 metronome:
- * pitch-shifted per tier, dipping under LOAD, ramping up over the 3 s token
- * spin-up.
+ * through three.js PositionalAudio (§How: Web Audio directly, no Howler).
+ * M2 completes the §10 set: a roving impact-emitter pool lands rustles/thuds/
+ * clangs at their true event positions, the ball emitter tracks the rendered
+ * ball carrying the whoosh loop with MANUAL doppler (browsers removed
+ * PannerNode doppler) and the turf roll loop, and the room-tone ambience bed
+ * starts at unlock on its own bus gain.
  */
 export class AudioEngine {
   readonly listener = new THREE.AudioListener();
@@ -53,12 +96,24 @@ export class AudioEngine {
   readonly machineAnchor: Emitter;
   readonly plateAnchor: Emitter;
   readonly panelAnchor: Emitter;
+  readonly boardAnchor: Emitter;
+  /** Roving one-shots (impact payload positions). */
+  readonly impacts: RovingEmitter;
+  /** Follows the rendered ball (main updates per frame). */
+  readonly ballAnchor = new THREE.Object3D();
 
   private whirr: THREE.PositionalAudio;
+  private whoosh: THREE.PositionalAudio;
+  private roll: THREE.PositionalAudio;
+  private room: THREE.Audio;
   private whirrTierRate = 1;
   private unlocked = false;
   private muted = false;
-  private rr = 0; // round-robin counter for contact variants
+  private rr = 0; // round-robin counter for contact/rustle variants
+  private dopplerRate = 1;
+  private prevBallDist = -1;
+  private listenerPos = new THREE.Vector3();
+  private ballPos = new THREE.Vector3();
 
   private bufs: {
     whirr?: AudioBuffer;
@@ -69,16 +124,36 @@ export class AudioEngine {
     thump?: AudioBuffer;
     click?: AudioBuffer;
     clink?: AudioBuffer;
+    whoosh?: AudioBuffer;
+    swish?: AudioBuffer;
+    thud?: AudioBuffer;
+    rustle?: AudioBuffer[];
+    clang?: AudioBuffer;
+    rattle?: AudioBuffer;
+    bounce?: AudioBuffer;
+    rollLoop?: AudioBuffer;
+    tick?: AudioBuffer;
+    room?: AudioBuffer;
   } = {};
 
   constructor() {
     this.machineAnchor = new Emitter(this.listener, 3, 4);
     this.plateAnchor = new Emitter(this.listener, 3, 3);
     this.panelAnchor = new Emitter(this.listener, 2, 2);
+    this.boardAnchor = new Emitter(this.listener, 2, 8);
+    this.impacts = new RovingEmitter(this.listener, 4, 4);
     this.whirr = new THREE.PositionalAudio(this.listener);
     this.whirr.setRefDistance(5);
     this.whirr.setRolloffFactor(1.1);
     this.machineAnchor.object.add(this.whirr);
+    this.whoosh = new THREE.PositionalAudio(this.listener);
+    this.whoosh.setRefDistance(2.5);
+    this.whoosh.setRolloffFactor(1.4);
+    this.roll = new THREE.PositionalAudio(this.listener);
+    this.roll.setRefDistance(3);
+    this.roll.setRolloffFactor(1.2);
+    this.ballAnchor.add(this.whoosh, this.roll);
+    this.room = new THREE.Audio(this.listener); // the Ambience bed, non-spatial
   }
 
   /** Splash click → resume context + synthesize the full cue set (~ms). */
@@ -94,7 +169,22 @@ export class AudioEngine {
     this.bufs.thump = perfectThump(ctx);
     this.bufs.click = panelClick(ctx);
     this.bufs.clink = tokenClink(ctx);
+    this.bufs.whoosh = whooshLoop(ctx);
+    this.bufs.swish = whiffSwish(ctx);
+    this.bufs.thud = backstopThud(ctx);
+    this.bufs.rustle = [0, 1, 2].map((v) => netRustle(ctx, v));
+    this.bufs.clang = frameClang(ctx);
+    this.bufs.rattle = guardRattle(ctx);
+    this.bufs.bounce = turfBounce(ctx);
+    this.bufs.rollLoop = turfRollLoop(ctx);
+    this.bufs.tick = boardTick(ctx);
+    this.bufs.room = roomTone(ctx);
     this.unlocked = true;
+    // The Ambience bed runs for the whole visit (§10 room tone).
+    this.room.setBuffer(this.bufs.room);
+    this.room.setLoop(true);
+    this.room.setVolume(0.16);
+    this.room.play();
   }
 
   toggleMute(): boolean {
@@ -106,6 +196,11 @@ export class AudioEngine {
   /** Tier → whirr playback rate: low & lazy at 40, high & angry at 90 (§5). */
   private tierRate(tier: TierMph): number {
     return 0.75 + TIERS.indexOf(tier) * 0.13;
+  }
+
+  /** Tier → whoosh loudness: "louder at higher tiers" (§10). */
+  private tierWhooshGain(tier: TierMph): number {
+    return 0.14 + TIERS.indexOf(tier) * 0.05;
   }
 
   setTier(tier: TierMph): void {
@@ -145,12 +240,111 @@ export class AudioEngine {
       case 'perfectThump':
         this.plateAnchor.play(b.thump!, 0.9);
         break;
+      case 'whooshStart':
+        this.whooshStart(this.tierWhooshGain(tier));
+        break;
+      case 'whooshRebase':
+        // Batted flight: the same loop, hotter and a touch higher.
+        this.whooshStart(Math.min(0.5, this.tierWhooshGain(tier) * 1.5), 1.12);
+        break;
+      case 'whooshStop':
+        this.fadeStop(this.whoosh, 0.08);
+        break;
+      case 'whiffSwish':
+        this.plateAnchor.play(b.swish!, 0.85);
+        break;
+      case 'backstopThud':
+        this.impacts.playAt(b.thud!, trig.px!, trig.py!, trig.pz!, 0.95);
+        break;
+      case 'netRustle':
+        this.impacts.playAt(b.rustle![this.rr++ % 3]!, trig.px!, trig.py!, trig.pz!, trig.gain ?? 0.7);
+        break;
+      case 'frameClang':
+        this.impacts.playAt(b.clang!, trig.px!, trig.py!, trig.pz!, 0.85);
+        break;
+      case 'guardRattle':
+        this.impacts.playAt(b.rattle!, trig.px!, trig.py!, trig.pz!, 0.85);
+        break;
+      case 'turfBounce':
+        this.impacts.playAt(b.bounce!, trig.px!, trig.py!, trig.pz!, 0.7);
+        break;
+      case 'rollStart':
+        this.rollStart();
+        break;
+      case 'rollStop':
+        this.fadeStop(this.roll, 0.12);
+        break;
+      case 'boardTick':
+        this.boardAnchor.play(b.tick!, 0.6);
+        break;
     }
   }
 
   /** Panel/board confirm click — UI-called (§UX audio confirm). */
   confirmClick(): void {
     if (this.unlocked && this.bufs.click) this.panelAnchor.play(this.bufs.click, 0.7);
+  }
+
+  /**
+   * Per-render-frame: follow the rendered ball and bend the whoosh's
+   * playbackRate with the radial velocity toward the listener — manual
+   * doppler (clamped ±15%, one-pole smoothed against zipper noise).
+   */
+  updateBall(ballPos: THREE.Vector3 | null, dt: number): void {
+    if (!this.unlocked) return;
+    if (ballPos) this.ballAnchor.position.copy(ballPos);
+    if (!this.whoosh.isPlaying || dt <= 0) {
+      this.prevBallDist = -1;
+      return;
+    }
+    this.listener.getWorldPosition(this.listenerPos);
+    this.ballAnchor.getWorldPosition(this.ballPos);
+    const dist = this.listenerPos.distanceTo(this.ballPos);
+    if (this.prevBallDist >= 0) {
+      const radialV = (dist - this.prevBallDist) / dt; // + receding, − approaching
+      const target = Math.min(1.15, Math.max(0.85, 1 - radialV / 343));
+      this.dopplerRate += (target - this.dopplerRate) * Math.min(1, dt * 10);
+      this.whoosh.setPlaybackRate(this.dopplerRate);
+    }
+    this.prevBallDist = dist;
+  }
+
+  private whooshStart(gain: number, rate = 1): void {
+    if (!this.bufs.whoosh) return;
+    if (this.whoosh.isPlaying) this.whoosh.stop();
+    this.whoosh.setBuffer(this.bufs.whoosh);
+    this.whoosh.setLoop(true);
+    this.dopplerRate = rate;
+    this.prevBallDist = -1;
+    this.whoosh.setPlaybackRate(rate);
+    this.whoosh.play();
+    // Quick fade-in so the loop never pops on.
+    const g = this.whoosh.gain.gain;
+    const now = this.listener.context.currentTime;
+    g.cancelScheduledValues(now);
+    g.setValueAtTime(0, now);
+    g.linearRampToValueAtTime(gain, now + 0.06);
+  }
+
+  private rollStart(): void {
+    if (!this.bufs.rollLoop || this.roll.isPlaying) return;
+    this.roll.setBuffer(this.bufs.rollLoop);
+    this.roll.setLoop(true);
+    this.roll.setVolume(0.55);
+    this.roll.play();
+  }
+
+  /** Ramp a looping source out and stop it (click-free). */
+  private fadeStop(sound: THREE.PositionalAudio, fadeS: number): void {
+    if (!sound.isPlaying) return;
+    const now = this.listener.context.currentTime;
+    const g = sound.gain.gain;
+    g.cancelScheduledValues(now);
+    g.setValueAtTime(g.value, now);
+    g.linearRampToValueAtTime(0, now + fadeS);
+    setTimeout(() => {
+      if (sound.isPlaying) sound.stop();
+    }, fadeS * 1000 + 60);
   }
 
   /** Token spin-up: wheels rise to tier pitch over 3 s (§10). */

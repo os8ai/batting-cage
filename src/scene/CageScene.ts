@@ -484,6 +484,11 @@ export class CageScene {
     if (!on) this.trailAges.fill(1);
   }
 
+  /** Interpolated ball position for the audio ball emitter (null = no ball). */
+  ballRenderPos(): THREE.Vector3 | null {
+    return this.ball.visible ? this.ball.position : null;
+  }
+
   showFocus(at: THREE.Vector3 | null): void {
     if (at) {
       this.focusRing.position.set(at.x, at.y, at.z);

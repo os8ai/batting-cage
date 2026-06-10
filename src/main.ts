@@ -40,7 +40,15 @@ rig.camera.add(audio.listener);
 audio.machineAnchor.object.position.set(0, 1.2, 14.5);
 audio.plateAnchor.object.position.set(0, 0.8, 0.2);
 audio.panelAnchor.object.position.copy(cage.panel.group.position).setY(1.2);
-cage.scene.add(audio.machineAnchor.object, audio.plateAnchor.object, audio.panelAnchor.object);
+audio.boardAnchor.object.position.copy(cage.board.group.position);
+cage.scene.add(
+  audio.machineAnchor.object,
+  audio.plateAnchor.object,
+  audio.panelAnchor.object,
+  audio.boardAnchor.object,
+  audio.impacts.group,
+  audio.ballAnchor
+);
 
 const hud = new DebugHud(document.body);
 const diag = new Diagnostics(document.body);
@@ -173,6 +181,7 @@ const loop = new GameLoop(
     const timeS = nowMs / 1000;
     rig.update(timeS, dt);
     cage.update(sim, alpha, dt, timeS);
+    audio.updateBall(cage.ballRenderPos(), dt);
     renderer.info.reset();
     postfx.render();
     diag.setRenderInfo(renderer.info);

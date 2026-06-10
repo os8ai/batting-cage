@@ -190,6 +190,212 @@ export function panelClick(ctx: AudioContext): AudioBuffer {
   return buf;
 }
 
+/**
+ * Loop-safe noise bed builder: many random-phase sine partials, every
+ * frequency an integer number of cycles over the loop — click-free wrap
+ * (same construction as the whirr's wheel-rush bed).
+ */
+function partialBed(
+  data: Float32Array,
+  sr: number,
+  durS: number,
+  seed: number,
+  count: number,
+  fLo: number,
+  fHi: number,
+  ampOf: (f: number) => number
+): void {
+  const fit = (f: number) => Math.round(f * durS) / durS;
+  const noise = lcg(seed);
+  for (let p = 0; p < count; p++) {
+    const f = fit(fLo + Math.abs(noise()) * (fHi - fLo));
+    const a = ampOf(f) * (0.6 + Math.abs(noise()) * 0.4);
+    const ph = noise() * Math.PI;
+    for (let i = 0; i < data.length; i++) {
+      data[i]! += a * Math.sin((2 * Math.PI * f * i) / sr + ph);
+    }
+  }
+}
+
+/** Ball whoosh loop — wind band, played on the roving ball emitter with
+ * manual doppler (gain by tier, §10 "louder at higher tiers"). */
+export function whooshLoop(ctx: AudioContext): AudioBuffer {
+  const dur = 1.0;
+  const { buf, data, sr } = buffer(ctx, dur);
+  partialBed(data, sr, dur, 0x3005, 90, 180, 2400, (f) => 18 / (f + 120));
+  // Slow loop-safe amplitude wobble so the wind breathes.
+  const am = Math.round(2.0 * dur) / dur;
+  for (let i = 0; i < data.length; i++) {
+    data[i]! *= 1 + 0.25 * Math.sin((2 * Math.PI * am * i) / sr);
+  }
+  normalize(data, 0.5);
+  return buf;
+}
+
+/** Whiff swish — the bat through empty air (§10 MISS swing). */
+export function whiffSwish(ctx: AudioContext): AudioBuffer {
+  const { buf, data, sr } = buffer(ctx, 0.32);
+  const noise = lcg(0x5a15);
+  for (let i = 0; i < data.length; i++) {
+    const t = i / sr;
+    // Raised-cosine hump: the swing passes the listener mid-sample.
+    const env = 0.5 - 0.5 * Math.cos((2 * Math.PI * t) / 0.32);
+    data[i] = noise() * env * env;
+  }
+  // Sweep the band up through the swing plane and back down.
+  onePoleLP(data, sr, (t) => 700 + 2600 * Math.sin((Math.PI * t) / 0.32));
+  onePoleHP(data, sr, 350);
+  normalize(data, 0.7);
+  return buf;
+}
+
+/** Backstop thud — deep and dead (e = 0.10 pad). */
+export function backstopThud(ctx: AudioContext): AudioBuffer {
+  const { buf, data, sr } = buffer(ctx, 0.3);
+  const noise = lcg(0xbac5);
+  for (let i = 0; i < data.length; i++) {
+    const t = i / sr;
+    const body = Math.sin(2 * Math.PI * (52 - 18 * t) * t) * Math.exp(-t / 0.08);
+    const slap = noise() * Math.exp(-t / 0.015);
+    data[i] = body * 1.1 + slap * 0.4;
+  }
+  onePoleLP(data, sr, 420);
+  normalize(data, 0.9);
+  return buf;
+}
+
+/** Net rustle — nylon hiss with a decaying flutter; 3 variants (§10,
+ * gain scaled by impact energy at trigger time). */
+export function netRustle(ctx: AudioContext, variant: number): AudioBuffer {
+  const { buf, data, sr } = buffer(ctx, 0.45);
+  const noise = lcg(0x4e7 + variant * 7919);
+  const flutterF = 14 + variant * 3.5;
+  for (let i = 0; i < data.length; i++) {
+    const t = i / sr;
+    const flutter = 0.55 + 0.45 * Math.sin(2 * Math.PI * flutterF * t + variant);
+    data[i] = noise() * Math.exp(-t / 0.13) * flutter;
+  }
+  onePoleLP(data, sr, 5200);
+  onePoleHP(data, sr, 750);
+  normalize(data, 0.8);
+  return buf;
+}
+
+/** Steel-frame clang — bright inharmonic ring (e = 0.45 upright). */
+export function frameClang(ctx: AudioContext): AudioBuffer {
+  const { buf, data, sr } = buffer(ctx, 0.4);
+  const noise = lcg(0xf2a6);
+  const partials: Array<[number, number, number]> = [
+    [742, 1.0, 0.12],
+    [1148, 0.62, 0.09],
+    [1690, 0.4, 0.07],
+    [2480, 0.22, 0.05],
+  ];
+  for (let i = 0; i < data.length; i++) {
+    const t = i / sr;
+    let v = noise() * Math.exp(-t / 0.005);
+    for (const [f, a, tau] of partials) v += a * Math.sin(2 * Math.PI * f * t) * Math.exp(-t / tau);
+    data[i] = v;
+  }
+  onePoleHP(data, sr, 300);
+  normalize(data, 0.85);
+  return buf;
+}
+
+/** Machine-guard rattle — a flurry of mesh ticks (e = 0.30 guard). */
+export function guardRattle(ctx: AudioContext): AudioBuffer {
+  const { buf, data, sr } = buffer(ctx, 0.35);
+  const noise = lcg(0x9a77);
+  // Tick train with widening gaps, like loose mesh settling.
+  let tickAt = 0;
+  let gap = 0.012;
+  const ticks: number[] = [];
+  while (tickAt < 0.3) {
+    ticks.push(tickAt);
+    tickAt += gap;
+    gap *= 1.35;
+  }
+  for (let i = 0; i < data.length; i++) {
+    const t = i / sr;
+    let v = 0;
+    for (const tk of ticks) {
+      if (t >= tk) v += noise() * Math.exp(-(t - tk) / 0.006) * Math.exp(-tk / 0.12);
+    }
+    v += 0.35 * Math.sin(2 * Math.PI * 320 * t) * Math.exp(-t / 0.04); // cage body knock
+    data[i] = v;
+  }
+  onePoleLP(data, sr, 3200);
+  normalize(data, 0.8);
+  return buf;
+}
+
+/** Turf bounce — short tick + low knock (§10). */
+export function turfBounce(ctx: AudioContext): AudioBuffer {
+  const { buf, data, sr } = buffer(ctx, 0.12);
+  const noise = lcg(0x70b0);
+  for (let i = 0; i < data.length; i++) {
+    const t = i / sr;
+    const knock = Math.sin(2 * Math.PI * (110 - 40 * t) * t) * Math.exp(-t / 0.035);
+    const tick = noise() * Math.exp(-t / 0.004);
+    data[i] = knock * 0.9 + tick * 0.5;
+  }
+  onePoleLP(data, sr, 1400);
+  normalize(data, 0.75);
+  return buf;
+}
+
+/** Turf roll loop — low rumble while the ball rolls out (kills on SETTLED). */
+export function turfRollLoop(ctx: AudioContext): AudioBuffer {
+  const dur = 0.8;
+  const { buf, data, sr } = buffer(ctx, dur);
+  partialBed(data, sr, dur, 0x2011, 40, 55, 420, (f) => 30 / (f + 60));
+  const am = Math.round(9 * dur) / dur;
+  for (let i = 0; i < data.length; i++) {
+    data[i]! *= 1 + 0.35 * Math.sin((2 * Math.PI * am * i) / sr);
+  }
+  normalize(data, 0.45);
+  return buf;
+}
+
+/** Board tick — the dot-matrix page-flip shimmer tick (§10). */
+export function boardTick(ctx: AudioContext): AudioBuffer {
+  const { buf, data, sr } = buffer(ctx, 0.05);
+  const noise = lcg(0xb0a2);
+  for (let i = 0; i < data.length; i++) {
+    const t = i / sr;
+    data[i] =
+      noise() * Math.exp(-t / 0.004) * 0.5 +
+      Math.sin(2 * Math.PI * 1980 * t) * Math.exp(-t / 0.012) * 0.8;
+  }
+  onePoleHP(data, sr, 900);
+  normalize(data, 0.55);
+  return buf;
+}
+
+/** Room tone — HVAC hum + distant facility air; the Ambience bed (§10,
+ * "no music anywhere"). Loop-safe. */
+export function roomTone(ctx: AudioContext): AudioBuffer {
+  const dur = 2.0;
+  const { buf, data, sr } = buffer(ctx, dur);
+  const fit = (f: number) => Math.round(f * dur) / dur;
+  // 60 Hz electrical hum family, very quiet.
+  const hums: Array<[number, number]> = [
+    [fit(60), 0.5],
+    [fit(120), 0.22],
+    [fit(180), 0.1],
+  ];
+  for (let i = 0; i < data.length; i++) {
+    const t = i / sr;
+    let v = 0;
+    for (const [f, a] of hums) v += a * Math.sin(2 * Math.PI * f * t);
+    data[i] = v;
+  }
+  // Air-handler noise floor above the hum.
+  partialBed(data, sr, dur, 0x4a1c, 70, 90, 900, (f) => 9 / (f + 90));
+  normalize(data, 0.35);
+  return buf;
+}
+
 /** Token clink — two coin partial bursts, staggered. */
 export function tokenClink(ctx: AudioContext): AudioBuffer {
   const { buf, data, sr } = buffer(ctx, 0.28);

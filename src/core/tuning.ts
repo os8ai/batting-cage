@@ -68,8 +68,8 @@ const LAUNCH_FOUL_POINTS = 25;
  * 2. Launch Bronze was flat: a σ=62 ms novice cleared bronze at EVERY tier
  *    (carry rises with tier, so points hold up while windows tighten).
  *    Bronze now tracks the σ ladder — max σ for 50% bronze falls smoothly
- *    ≈ 118 → 37 ms from 40 → 90 (§14.22's 2–4 h climb, no cliff) while a
- *    first-session novice still brons at 40 near-certainly.
+ *    133 → 111 → 90 → 72 → 55 → 38 ms from 40 → 90 (§14.22's 2–4 h climb,
+ *    no cliff) while a first-session novice still brons at 40 near-certainly.
  *
  * Silver = the practiced rung, Gold = the near-elite rung, at every tier.
  * Carry bars keep the spec's launch values — the Wii-pattern second check

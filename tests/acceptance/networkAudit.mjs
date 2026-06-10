@@ -9,7 +9,7 @@
  */
 import { readFileSync, rmSync } from 'node:fs';
 import { chromium } from 'playwright-core';
-import { assert, assertNoErrors, BASE_URL, playRound, waitPhase } from './helpers.mjs';
+import { assert, assertNoErrors, BASE_URL, playRound } from './helpers.mjs';
 
 // Lockfile audit first (§14.20: "exactly two runtime dependencies").
 const lock = JSON.parse(readFileSync('package-lock.json', 'utf8'));

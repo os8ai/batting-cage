@@ -12,7 +12,8 @@ export class Lighting {
   readonly group = new THREE.Group();
   /** Fixture housings to include in the selective-bloom pass. */
   readonly glowMeshes: THREE.Mesh[] = [];
-
+  private key!: THREE.SpotLight;
+  private fill!: THREE.SpotLight;
 
   constructor() {
     // Near-dark base so the facility never goes fully black.
@@ -89,6 +90,7 @@ export class Lighting {
 
     // Key: shadow caster over the plate (§4 — 2048 soft).
     const key = new THREE.SpotLight(0xfff2dd, 260, 0, 0.62, 0.45, 1.6);
+    this.key = key;
     key.position.set(0, fixtureY, 2 * FT_TO_M);
     key.target.position.set(0, 0, 0.6);
     key.castShadow = true;
@@ -101,6 +103,7 @@ export class Lighting {
 
     // Fill: shadow caster over the machine (1024).
     const fill = new THREE.SpotLight(0xf4ecdc, 200, 0, 0.6, 0.5, 1.6);
+    this.fill = fill;
     fill.position.set(0, fixtureY, 42 * FT_TO_M);
     fill.target.position.set(0, 0, RELEASE_DIST_M);
     fill.castShadow = true;
@@ -125,5 +128,19 @@ export class Lighting {
 
   update(_dt: number, _timeS: number): void {
     // No per-frame lighting animation in M1.
+  }
+
+  /** §11 preset: 2 casters (key 2048 + fill 1024) / 1 (key) / 0 (blob only). */
+  applyShadowPreset(casters: 0 | 1 | 2, keySize: number, fillSize: number): void {
+    const retarget = (light: THREE.SpotLight, on: boolean, size: number) => {
+      light.castShadow = on;
+      if (light.shadow.mapSize.x !== size) {
+        light.shadow.mapSize.set(size, size);
+        light.shadow.map?.dispose();
+        light.shadow.map = null; // re-allocated at the new size next render
+      }
+    };
+    retarget(this.key, casters >= 1, keySize);
+    retarget(this.fill, casters >= 2, fillSize);
   }
 }

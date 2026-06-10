@@ -58,6 +58,9 @@ export class Net {
   private swayUniforms = { uTime: { value: 0 } };
   private acc = 0;
   private scratch = new THREE.Vector3();
+  /** §11 preset: which panels stay simulated, and at what rate. */
+  private enabled: Set<NetPanel> = new Set(['far', 'left', 'right', 'ceiling', 'back']);
+  private clothDt = CLOTH_DT;
 
   constructor() {
     const tex = netTexture();
@@ -207,11 +210,24 @@ export class Net {
     this.group.add(mesh);
   }
 
+  /**
+   * §11 preset switch: only changes which panels step and the step rate —
+   * the solver itself is untouched (M3-PLAN risk 5). Disabled panels rest in
+   * their pre-settled gravity belly under the sway-shader look.
+   */
+  setQuality(panels: NetPanel[] | 'ALL', hz: number): void {
+    this.enabled = new Set(panels === 'ALL' ? (['far', 'left', 'right', 'ceiling', 'back'] as NetPanel[]) : panels);
+    this.clothDt = 1 / hz;
+    for (const p of this.panels) {
+      if (!this.enabled.has(p.name)) p.active = false;
+    }
+  }
+
   /** NET_HIT → momentum impulse into the struck panel along its normal. */
   onEvent(e: DomainEvent): void {
     if (e.type !== 'NET_HIT') return;
     const p = this.byName.get(e.panel);
-    if (!p) return;
+    if (!p || !this.enabled.has(p.name)) return;
     // Impact world position → panel-local node grid (worldToLocal includes
     // the xy stretch, so local coords are cloth coords directly).
     const local = this.scratch.set(e.px, e.py, e.pz);
@@ -226,15 +242,15 @@ export class Net {
     p.active = true;
   }
 
-  /** Fixed 60 Hz × 2-substep sub-accumulator on the render loop (§11). */
+  /** Fixed-rate (60 Hz High / 30 Hz Medium) sub-accumulator (§11). */
   update(dt: number, timeS: number): void {
     this.swayUniforms.uTime.value = timeS;
-    this.acc = Math.min(this.acc + dt, CLOTH_DT * 3); // hitch cap
-    while (this.acc >= CLOTH_DT) {
-      this.acc -= CLOTH_DT;
+    this.acc = Math.min(this.acc + dt, this.clothDt * 3); // hitch cap
+    while (this.acc >= this.clothDt) {
+      this.acc -= this.clothDt;
       for (const p of this.panels) {
         if (!p.active) continue;
-        stepCloth(p.cloth, CLOTH_DT, CLOTH_SUBSTEPS, p.g.x, p.g.y, p.g.z);
+        stepCloth(p.cloth, this.clothDt, CLOTH_SUBSTEPS, p.g.x, p.g.y, p.g.z);
         p.dirty = true;
         if (settleEnergy(p.cloth) < CLOTH_REST_ENERGY) p.active = false;
       }

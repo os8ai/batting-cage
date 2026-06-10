@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { Diagnostics } from './app/Diagnostics';
 import { EventBus } from './app/events';
 import { GameLoop } from './app/GameLoop';
+import { AutoDetectProbe, PRESETS, type Preset } from './app/Quality';
 import { AudioEngine } from './audio/AudioEngine';
 import { createCueContext, cuesForBoardSignal, cuesForEvent } from './audio/cueMap';
 import { TIERS } from './core/constants';
@@ -10,14 +11,18 @@ import { ModeStack, routeSpace } from './input/modes';
 import { attachPointer } from './input/pointer';
 import { attachSwingInput } from './input/swing';
 import { attachUiKeys } from './input/uiKeys';
-import { bootPersistence, requestDurableStorage } from './persist/browser';
+import { bootPersistence, downloadText, pickFileText, requestDurableStorage } from './persist/browser';
+import { exportSaveJson, importSaveJson, suggestedExportName } from './persist/exportImport';
+import { refusalMessage } from './persist/migrate';
 import { Recorder, type RoundOutcome } from './persist/recorder';
 import { careerFromSave, TIER_KEYS, type SaveV1 } from './persist/schema';
 import { CageScene } from './scene/CageScene';
 import { CameraRig } from './scene/CameraRig';
 import { PostFX } from './scene/PostFX';
 import type { AttractData, BoardSignal } from './ui/diegetic/boardPages/pageMachine';
+import { EscSheet } from './ui/overlay/EscSheet';
 import { showSplash } from './ui/overlay/Splash';
+import { KeyHints, Toasts } from './ui/overlay/Toasts';
 
 // M3 boot (Flow 2): persistence first — the save id seeds the sim (§6
 // determinism: replays differ between careers, repeat within one), the career
@@ -69,6 +74,24 @@ cage.scene.add(
 
 const diag = new Diagnostics(document.body);
 const modes = new ModeStack();
+const toasts = new Toasts(document.body);
+const keyHints = new KeyHints(document.body);
+
+// -- quality presets (§11) ----------------------------------------------------
+
+function applyPreset(preset: Preset): void {
+  const cfg = PRESETS[preset];
+  cage.lighting.applyShadowPreset(cfg.shadowCasters, cfg.keyShadowMapSize, cfg.fillShadowMapSize);
+  postfx.applyPreset(cfg.bloom, cfg.smaa);
+  cage.net.setQuality(cfg.clothPanels, cfg.clothHz);
+  cage.setSettledShadows(cfg.settledShadows);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2) * cfg.renderScale);
+  postfx.setSize(window.innerWidth, window.innerHeight);
+}
+
+// First run probes ~120 hidden frames at High, then decides (design note 7).
+let probe: AutoDetectProbe | null = save.settings.qualityPreset === null ? new AutoDetectProbe() : null;
+applyPreset(save.settings.qualityPreset ?? 'HIGH');
 
 // -- loadout auto-resume (§Flow 2: returning player's loadout preselected) ----
 
@@ -104,6 +127,65 @@ if (sim.selectTier(save.loadout.lastTier)) {
 }
 cage.board.machine.setCoachEnabled(totalRounds(save) === 0);
 refreshCareerSurfaces();
+audio.setVolumes(save.settings.volumes);
+audio.setMuted(save.settings.muted);
+
+// -- ESC sheet: pause + the flat system concession (§UX) ----------------------
+
+const escSheet = new EscSheet(document.body, {
+  onPreset: (preset) => {
+    applyPreset(preset);
+    save.settings.qualityPreset = preset;
+    recorder.markDirty();
+    probe = null; // a manual choice ends the auto-detect
+  },
+  onVolumes: (v) => {
+    save.settings.volumes = audio.setVolumes(v);
+    recorder.markDirty();
+  },
+  onExport: () => {
+    recorder.flush();
+    downloadText(suggestedExportName(persisted.clock.nowISO()), exportSaveJson(save));
+    toasts.show('SAVE EXPORTED');
+  },
+  onImport: () => {
+    void pickFileText().then((text) => {
+      if (text === null) return;
+      const result = importSaveJson(text);
+      if (!result.ok) {
+        // §14.18: refused with a board message, prior save intact.
+        cage.board.showNotice(refusalMessage(result.reason), sim.t);
+        toasts.show(refusalMessage(result.reason));
+        return;
+      }
+      if (!persisted.store.write(result.save)) {
+        toasts.show('IMPORT FAILED TO WRITE');
+        return;
+      }
+      window.location.reload(); // boot re-reads the promoted save
+    });
+  },
+  onReset: () => {
+    persisted.store.clear();
+    window.location.reload();
+  },
+});
+
+function openEscSheet(): void {
+  modes.push('ESC');
+  escSheet.setState(save.settings.qualityPreset, audio.getVolumes());
+  escSheet.open();
+  loop.setPaused(true); // sim pause…
+  audio.suspend(); // …+ AudioContext suspend (§ESC pause)
+}
+
+function closeEscSheet(): void {
+  escSheet.close();
+  modes.pop('ESC');
+  audio.resume();
+  recorder.flush();
+  if (!document.hidden) loop.setPaused(false);
+}
 
 // -- persistence subscriber (FIRST: the round outcome feeds the board) -------
 
@@ -144,7 +226,10 @@ bus.subscribe((e) => {
     if (lastOutcome?.madeTop5) cage.board.machine.requestInitials(save.loadout.lastInitials);
     cage.board.machine.setCoachEnabled(false); // first round complete → coaching done
     refreshCareerSurfaces();
+    // Off-device backup nudge after a PB (browser storage is evictable).
+    if (e.isPB) toasts.show('NEW PB · ESC TO EXPORT SAVE', 5000);
   }
+  if (e.type === 'TOKEN') keyHints.hide();
 });
 
 // -- station interaction (camera director + machine panel) -------------------
@@ -238,6 +323,10 @@ attachUiKeys({
   },
   onEscape: () => {
     noteInput();
+    if (modes.mode === 'ESC') {
+      closeEscSheet();
+      return;
+    }
     if (modes.mode === 'INITIALS') {
       // Skippable (§What 7): accept the current letters.
       for (let i = 0; i < 3 && cage.board.machine.inInitials; i++) {
@@ -245,11 +334,12 @@ attachUiKeys({
       }
       return;
     }
-    if (idle()) goToStation('PLAY');
+    openEscSheet();
   },
   onMute: () => {
     noteInput();
-    audio.toggleMute();
+    save.settings.muted = audio.toggleMute();
+    recorder.markDirty();
   },
   onHandedness: () => {
     noteInput();
@@ -333,6 +423,16 @@ const loop = new GameLoop(
     const dt = lastFrameMs > 0 ? Math.min(0.1, (nowMs - lastFrameMs) / 1000) : 1 / 60;
     lastFrameMs = nowMs;
     const timeS = nowMs / 1000;
+    if (probe) {
+      const decided = probe.feed(dt);
+      if (decided !== null) {
+        probe = null;
+        applyPreset(decided);
+        save.settings.qualityPreset = decided;
+        recorder.markDirty();
+        toasts.show(`QUALITY ${decided} (AUTO)`);
+      }
+    }
     handleBoardSignals(cage.board.drive(sim.t));
     if (!rig.attract && idle() && modes.mode === 'PLAY' && nowMs - lastInputMs > ATTRACT_AFTER_MS) {
       rig.startAttract();
@@ -353,6 +453,7 @@ window.addEventListener('blur', () => {
   loop.setPaused(true);
 });
 window.addEventListener('focus', () => {
+  if (modes.mode === 'ESC') return; // the sheet owns the pause
   sim.voidCurrentPitch();
   loop.setPaused(false);
 });
@@ -390,6 +491,8 @@ if (new URLSearchParams(window.location.search).has('dev')) {
 // The splash click is the audio-unlock gesture; the loop starts under the fade.
 void splash.clicked.then(async () => {
   await audio.unlock();
+  audio.setMuted(save.settings.muted); // re-assert over the fresh bus graph
   splash.dismiss();
+  keyHints.show();
   loop.start();
 });

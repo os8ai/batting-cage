@@ -63,10 +63,16 @@ const sel = await page.evaluate(() => window.__bc.sim.currentTier);
 if (sel !== 40) throw new Error(`locked 60 was selected (tier=${sel})`);
 await page.keyboard.press('ArrowUp');
 await page.keyboard.press('ArrowUp');
-await page.keyboard.press('Escape');
-await page.waitForTimeout(2500);
 
-// Token: SPACE at idle inserts (M3 token slot; R is retired). Schedule a
+// ESC sheet (M3): pause + quality/volumes/export — open, shoot, close.
+await page.keyboard.press('Escape');
+await page.waitForTimeout(400);
+await page.screenshot({ path: `${OUT}/05-esc-sheet.png` });
+await page.keyboard.press('Escape');
+await page.waitForTimeout(600);
+
+// Token: SPACE at idle inserts (M3 token slot; R is retired) — focus is back
+// on the selected 40, so this single press proceeds (§Flow 2). Schedule a
 // near-perfect SPACE press for pitch 1, timed off the sim's own schedule.
 await page.keyboard.press('Space');
 await waitPhase('FLIGHT');

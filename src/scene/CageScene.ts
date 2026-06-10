@@ -542,6 +542,12 @@ export class CageScene {
     this.rackBats.METAL.visible = b !== 'METAL';
   }
 
+  /** §11 settled-ball shadows row (off at Low). */
+  setSettledShadows(on: boolean): void {
+    for (const m of this.settledBalls) m.castShadow = on;
+    this.ball.castShadow = on;
+  }
+
   /** Batted-flight tracer on/off (CONTACT → on; FEED/settle → off). */
   setBattedTrail(on: boolean): void {
     this.trailOn = on;

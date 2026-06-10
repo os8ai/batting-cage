@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { TIERS } from '../core/constants';
 import type { TierMph } from '../core/types';
+import { clampVolumes, DEFAULT_VOLUMES, type Volumes } from './buses';
 import type { CueTrigger } from './cueMap';
 import {
   backstopThud,
@@ -29,7 +30,7 @@ import {
 /** Round-robin pool of PositionalAudio nodes at one spatial anchor (§10). */
 class Emitter {
   readonly object = new THREE.Object3D();
-  private pool: THREE.PositionalAudio[] = [];
+  readonly pool: THREE.PositionalAudio[] = [];
   private next = 0;
 
   constructor(listener: THREE.AudioListener, size: number, refDistance: number) {
@@ -57,7 +58,7 @@ class Emitter {
  * impacts sound from their own positions (M2 §10 spatial one-shots). */
 class RovingEmitter {
   readonly group = new THREE.Group();
-  private voices: Array<{ holder: THREE.Object3D; audio: THREE.PositionalAudio }> = [];
+  readonly voices: Array<{ holder: THREE.Object3D; audio: THREE.PositionalAudio }> = [];
   private next = 0;
 
   constructor(listener: THREE.AudioListener, size: number, refDistance: number) {
@@ -114,6 +115,10 @@ export class AudioEngine {
   private whirrTierRate = 1;
   private unlocked = false;
   private muted = false;
+  /** §10 buses: Master (listener) / SFX / Ambience (ESC sliders + M mute). */
+  private sfxBus: GainNode | null = null;
+  private ambienceBus: GainNode | null = null;
+  private volumes: Volumes = { ...DEFAULT_VOLUMES };
   private rr = 0; // round-robin counter for contact/rustle variants
   private dopplerRate = 1;
   private prevBallDist = -1;
@@ -173,6 +178,30 @@ export class AudioEngine {
     if (this.unlocked) return;
     const ctx = this.listener.context;
     if (ctx.state === 'suspended') await ctx.resume();
+    // Bus graph: every voice's gain → SFX bus (or Ambience for the room
+    // bed) → listener input; Master rides the listener's own gain.
+    this.sfxBus = ctx.createGain();
+    this.ambienceBus = ctx.createGain();
+    this.sfxBus.connect(this.listener.getInput());
+    this.ambienceBus.connect(this.listener.getInput());
+    const toSfx: THREE.Audio<GainNode | PannerNode>[] = [
+      ...this.machineAnchor.pool,
+      ...this.plateAnchor.pool,
+      ...this.panelAnchor.pool,
+      ...this.boardAnchor.pool,
+      ...this.impacts.voices.map((v) => v.audio),
+      this.whirr,
+      this.whoosh,
+      this.roll,
+      this.countUp,
+    ];
+    for (const a of toSfx) {
+      a.gain.disconnect();
+      a.gain.connect(this.sfxBus);
+    }
+    this.room.gain.disconnect();
+    this.room.gain.connect(this.ambienceBus);
+    this.applyVolumes();
     this.bufs.whirr = whirrLoop(ctx);
     this.bufs.clunk = feedClunk(ctx);
     this.bufs.thwip = releaseThwip(ctx);
@@ -203,9 +232,43 @@ export class AudioEngine {
   }
 
   toggleMute(): boolean {
-    this.muted = !this.muted;
-    this.listener.setMasterVolume(this.muted ? 0 : 1);
+    this.setMuted(!this.muted);
     return this.muted;
+  }
+
+  setMuted(muted: boolean): void {
+    this.muted = muted;
+    this.applyVolumes();
+  }
+
+  get isMuted(): boolean {
+    return this.muted;
+  }
+
+  /** ESC-sheet sliders → buses (clamped; persisted by the caller). */
+  setVolumes(v: Partial<Volumes>): Volumes {
+    this.volumes = clampVolumes({ ...this.volumes, ...v });
+    this.applyVolumes();
+    return this.volumes;
+  }
+
+  getVolumes(): Volumes {
+    return { ...this.volumes };
+  }
+
+  private applyVolumes(): void {
+    this.listener.setMasterVolume(this.muted ? 0 : this.volumes.master);
+    if (this.sfxBus) this.sfxBus.gain.value = this.volumes.sfx;
+    if (this.ambienceBus) this.ambienceBus.gain.value = this.volumes.ambience;
+  }
+
+  /** ESC pause: suspend the context (silence without tearing the graph). */
+  suspend(): void {
+    void this.listener.context.suspend();
+  }
+
+  resume(): void {
+    void this.listener.context.resume();
   }
 
   /** Tier → whirr playback rate: low & lazy at 40, high & angry at 90 (§5). */

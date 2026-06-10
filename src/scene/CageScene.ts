@@ -50,7 +50,11 @@ export class CageScene {
 
   private ball: THREE.Mesh;
   private ballShadow: THREE.Mesh;
-  private settledBalls: THREE.Mesh[] = [];
+  // Settled pool as ONE InstancedMesh (M4 design note 4): 12 separate meshes
+  // cost ~11 redundant draw calls across main + shadow passes — the §12
+  // <120 headroom. Positions still come from the sim pool exactly as before.
+  private settledMesh: THREE.InstancedMesh;
+  private settledM4 = new THREE.Matrix4();
   private focusRing: THREE.Mesh;
   private trail: THREE.Points;
   private trailAges: Float32Array;
@@ -63,7 +67,8 @@ export class CageScene {
   private cart!: THREE.Group;
   private cartHome = new THREE.Vector3();
   private sweepT = -1; // < 0 = idle
-  private sweptBalls: THREE.Mesh[] = [];
+  /** Sweep-owned copies of the pile's positions (the sim pool is already clear). */
+  private sweptPos: THREE.Vector3[] = [];
 
   // Previous/current tick ball position for interpolated rendering.
   private prev = new THREE.Vector3();
@@ -115,13 +120,11 @@ export class CageScene {
 
     this.settledMat = new THREE.MeshStandardMaterial({ color: 0xdedcd2, roughness: 0.55 });
     const settledGeo = new THREE.SphereGeometry(BALL_RADIUS_M, 12, 8);
-    for (let i = 0; i < SETTLED_POOL; i++) {
-      const m = new THREE.Mesh(settledGeo, this.settledMat);
-      m.castShadow = true;
-      m.visible = false;
-      this.scene.add(m);
-      this.settledBalls.push(m);
-    }
+    this.settledMesh = new THREE.InstancedMesh(settledGeo, this.settledMat, SETTLED_POOL);
+    this.settledMesh.castShadow = true;
+    this.settledMesh.count = 0;
+    this.settledMesh.frustumCulled = false; // pile spans the lane; count is tiny
+    this.scene.add(this.settledMesh);
 
     // Batted-ball tracer: a short-lived additive point trail so the launch
     // arc reads against the dark facility (owner playtest: the rise to the
@@ -544,7 +547,7 @@ export class CageScene {
 
   /** §11 settled-ball shadows row (off at Low). */
   setSettledShadows(on: boolean): void {
-    for (const m of this.settledBalls) m.castShadow = on;
+    this.settledMesh.castShadow = on;
     this.ball.castShadow = on;
   }
 
@@ -566,8 +569,12 @@ export class CageScene {
    * clock. No-op when the floor is already clean (first round).
    */
   startSweep(): void {
-    this.sweptBalls = this.settledBalls.filter((m) => m.visible);
-    if (this.sweptBalls.length === 0) return;
+    this.sweptPos = [];
+    for (let i = 0; i < this.settledMesh.count; i++) {
+      this.settledMesh.getMatrixAt(i, this.settledM4);
+      this.sweptPos.push(new THREE.Vector3().setFromMatrixPosition(this.settledM4));
+    }
+    if (this.sweptPos.length === 0) return;
     this.sweepT = 0;
   }
 
@@ -590,10 +597,10 @@ export class CageScene {
         THREE.MathUtils.lerp(this.cartHome.z, GUTTER_Z, u)
       );
       // The brush front pushes any ball it has passed toward the gutter.
-      for (const m of this.sweptBalls) {
-        if (this.cart.position.z > m.position.z) {
-          m.position.z = this.cart.position.z + 0.45;
-          m.position.x += (Math.sign(m.position.x || 1) * 0.6 - m.position.x) * Math.min(1, dt * 3);
+      for (const p of this.sweptPos) {
+        if (this.cart.position.z > p.z) {
+          p.z = this.cart.position.z + 0.45;
+          p.x += (Math.sign(p.x || 1) * 0.6 - p.x) * Math.min(1, dt * 3);
         }
       }
     } else if (t <= T_END) {
@@ -610,11 +617,19 @@ export class CageScene {
     this.settledMat.opacity = fade;
     if (t >= T_END) {
       this.sweepT = -1;
-      for (const m of this.sweptBalls) m.visible = false;
-      this.sweptBalls = [];
+      this.sweptPos = [];
+      this.settledMesh.count = 0;
       this.settledMat.transparent = false;
       this.settledMat.opacity = 1;
       this.cart.position.copy(this.cartHome);
+    } else {
+      // Write the sweep-driven pile into the instance matrices.
+      for (let i = 0; i < this.sweptPos.length; i++) {
+        this.settledM4.makeTranslation(this.sweptPos[i]!.x, this.sweptPos[i]!.y, this.sweptPos[i]!.z);
+        this.settledMesh.setMatrixAt(i, this.settledM4);
+      }
+      this.settledMesh.count = this.sweptPos.length;
+      this.settledMesh.instanceMatrix.needsUpdate = true;
     }
   }
 
@@ -667,20 +682,18 @@ export class CageScene {
     (this.trail.geometry.attributes.aAge as THREE.BufferAttribute).needsUpdate = true;
 
     if (this.sweepT >= 0) {
-      // The sweep owns the settled meshes until the cart parks (the sim's
+      // The sweep owns the settled instances until the cart parks (the sim's
       // pool is already empty — the fiction plays out during SPINUP).
       this.updateSweep(dt);
     } else {
-      for (let i = 0; i < this.settledBalls.length; i++) {
-        const mesh = this.settledBalls[i]!;
-        const b = sim.settled[i];
-        if (b) {
-          mesh.visible = true;
-          mesh.position.set(b.px, b.py, b.pz);
-        } else {
-          mesh.visible = false;
-        }
+      const n = Math.min(sim.settled.length, SETTLED_POOL);
+      for (let i = 0; i < n; i++) {
+        const b = sim.settled[i]!;
+        this.settledM4.makeTranslation(b.px, b.py, b.pz);
+        this.settledMesh.setMatrixAt(i, this.settledM4);
       }
+      this.settledMesh.count = n;
+      if (n > 0) this.settledMesh.instanceMatrix.needsUpdate = true;
     }
 
     this.machine.update(sim);

@@ -1,13 +1,22 @@
 /**
- * The acceptance lane (§14.11–.13, .18): builds nothing — run `npm run build`
- * first. Serves dist/ on :4317, then runs the four scenarios sequentially in
- * one persistent profile (First Contact seeds the career the others chain
- * on). Separate from `npm test` (the ~3 s headless lane) by design.
+ * The acceptance lane (§14.11–.13, .15, .18, .20): builds nothing — run
+ * `npm run build` first. Serves dist/ on :4317, then runs the steps
+ * sequentially: throttled-load (M4, fresh profile, CDP 20 Mbps) → the four
+ * M3 scenarios in one persistent profile (First Contact seeds the career
+ * the others chain on) → the network-zero audit (M4, fresh profile).
+ * Separate from `npm test` (the ~3 s headless lane) by design.
  */
 import { spawn } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
 
-const scenarios = ['firstContact.mjs', 'mastery.mjs', 'duel.mjs', 'durability.mjs'];
+const scenarios = [
+  'throttledLoad.mjs',
+  'firstContact.mjs',
+  'mastery.mjs',
+  'duel.mjs',
+  'durability.mjs',
+  'networkAudit.mjs',
+];
 mkdirSync('tests/acceptance/shots', { recursive: true });
 
 const server = spawn('npx', ['vite', 'preview', '--port', '4317', '--strictPort'], {

@@ -49,21 +49,26 @@ await page.waitForTimeout(1800);
 await page.screenshot({ path: `${OUT}/02-idle-scene.png` });
 await page.keyboard.press('F3');
 
-// Panel: select 60 mph.
+// Panel: a fresh career has only 40 unlocked (M3 §8) — walk the focus over
+// the locked 60 (red + stencil), watch the refusal, then settle on 40.
 await page.keyboard.press('ArrowDown');
 await page.waitForTimeout(2500); // dolly (slow under software rendering)
 await page.screenshot({ path: `${OUT}/03-panel-station.png` });
 await page.keyboard.press('ArrowDown');
 await page.keyboard.press('ArrowDown');
-await page.keyboard.press('Space');
+await page.keyboard.press('Space'); // locked pick → refusal flash, no selection
 await page.waitForTimeout(300);
 await page.screenshot({ path: `${OUT}/04-panel-confirmed.png` });
+const sel = await page.evaluate(() => window.__bc.sim.currentTier);
+if (sel !== 40) throw new Error(`locked 60 was selected (tier=${sel})`);
+await page.keyboard.press('ArrowUp');
+await page.keyboard.press('ArrowUp');
 await page.keyboard.press('Escape');
 await page.waitForTimeout(2500);
 
-// Token. Schedule a near-perfect SPACE press for pitch 1 inside the page,
-// timed off the sim's own schedule (immune to render-loop lag).
-await page.keyboard.press('KeyR');
+// Token: SPACE at idle inserts (M3 token slot; R is retired). Schedule a
+// near-perfect SPACE press for pitch 1, timed off the sim's own schedule.
+await page.keyboard.press('Space');
 await waitPhase('FLIGHT');
 // Install the reveal-freeze watcher BEFORE the press: it pauses the loop two
 // frames into BOARD_REVEAL so screenshot latency can't outrun the hold.

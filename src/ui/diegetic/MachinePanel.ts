@@ -1,14 +1,15 @@
 import * as THREE from 'three';
 import { TIERS } from '../../core/constants';
+import { requirementStencil } from '../../core/rules/progression';
 import type { TierMph } from '../../core/types';
 
 /**
  * §4 machine control panel: pedestal by the cage door with six lit tier
- * buttons; arrows move focus, SPACE/ENTER confirms with a physical click,
- * mouse clicks land on the same buttons (raycast → uv). In M1 all six tiers
- * read unlocked/green — red locked states + stenciled requirements wire to
- * progression in M3. The token slot sits below (interactive in M3; R-token
- * remains the M0-DEBUG path).
+ * buttons — green = unlocked, red = locked with the §8 requirement stenciled
+ * beside it ("BRONZE AT 50 UNLOCKS 60"); arrows move focus, SPACE/ENTER
+ * confirms with a physical click (locked picks refuse), mouse clicks land on
+ * the same buttons (raycast → uv). TIER_UNLOCKED relights the button live.
+ * The token slot sits below (SPACE inserts, §UX station c).
  */
 const W = 256;
 const H = 384;
@@ -28,7 +29,9 @@ export class MachinePanel {
   private ctx: CanvasRenderingContext2D;
   private texture: THREE.CanvasTexture;
   private flashUntil = 0;
+  private refuseUntil = 0;
   private nowS = 0;
+  private unlocked = new Set<TierMph>(TIERS);
 
   constructor() {
     this.canvas = document.createElement('canvas');
@@ -81,9 +84,32 @@ export class MachinePanel {
     this.redraw();
   }
 
-  /** Confirm the focused tier (panel click + button flash). */
-  confirm(): TierMph {
-    this.selectedTier = TIERS[this.focusIndex]!;
+  /** Unlocked set from the career (boot + live TIER_UNLOCKED relight). */
+  setUnlocked(tiers: Iterable<TierMph>): void {
+    this.unlocked = new Set(tiers);
+    this.redraw();
+  }
+
+  isUnlocked(tier: TierMph): boolean {
+    return this.unlocked.has(tier);
+  }
+
+  get focusedTier(): TierMph {
+    return TIERS[this.focusIndex]!;
+  }
+
+  /**
+   * Confirm the focused tier. A locked pick refuses: red flash, no selection,
+   * returns null (§UX: refusal click for locked picks).
+   */
+  confirm(): TierMph | null {
+    const tier = TIERS[this.focusIndex]!;
+    if (!this.unlocked.has(tier)) {
+      this.refuseUntil = this.nowS + 0.3;
+      this.redraw();
+      return null;
+    }
+    this.selectedTier = tier;
     this.flashUntil = this.nowS + 0.25;
     this.redraw();
     return this.selectedTier;
@@ -113,6 +139,10 @@ export class MachinePanel {
       this.flashUntil = 0;
       this.redraw();
     }
+    if (this.refuseUntil > 0 && timeS > this.refuseUntil) {
+      this.refuseUntil = 0;
+      this.redraw();
+    }
   }
 
   private redraw(): void {
@@ -131,16 +161,32 @@ export class MachinePanel {
       const top = BTN_TOP + i * (BTN_H + BTN_GAP);
       const isSel = tier === this.selectedTier;
       const isFocus = i === this.focusIndex;
+      const locked = !this.unlocked.has(tier);
       const flashing = isFocus && this.flashUntil > 0;
-      // M1: every tier unlocked → green-lit buttons (§UX; red/locked is M3).
-      ctx.fillStyle = flashing ? '#7dffa0' : isSel ? '#1d8a3c' : '#123a1e';
+      const refusing = isFocus && locked && this.refuseUntil > 0;
+      // §UX: green = unlocked, red = locked with the requirement stenciled.
+      if (locked) {
+        ctx.fillStyle = refusing ? '#ff5348' : '#3a1411';
+      } else {
+        ctx.fillStyle = flashing ? '#7dffa0' : isSel ? '#1d8a3c' : '#123a1e';
+      }
       ctx.fillRect(28, top, W - 56, BTN_H);
-      ctx.strokeStyle = isFocus ? '#ffb000' : '#2c6b3d';
+      ctx.strokeStyle = isFocus ? '#ffb000' : locked ? '#6b2c26' : '#2c6b3d';
       ctx.lineWidth = isFocus ? 4 : 2;
       ctx.strokeRect(28, top, W - 56, BTN_H);
-      ctx.fillStyle = flashing ? '#06280f' : '#b9ffc9';
-      ctx.font = 'bold 26px monospace';
-      ctx.fillText(`${tier} MPH`, W / 2, top + 32);
+      if (locked) {
+        ctx.fillStyle = refusing ? '#2b0907' : '#ff8d80';
+        ctx.font = 'bold 20px monospace';
+        ctx.fillText(`${tier} MPH`, W / 2, top + 20);
+        // The §8 stencil, fit to the button: "BRONZE AT 50 UNLOCKS 60".
+        ctx.font = 'bold 10px monospace';
+        ctx.fillStyle = refusing ? '#2b0907' : '#c96a5e';
+        ctx.fillText(requirementStencil(tier) ?? '', W / 2, top + 38);
+      } else {
+        ctx.fillStyle = flashing ? '#06280f' : '#b9ffc9';
+        ctx.font = 'bold 26px monospace';
+        ctx.fillText(`${tier} MPH`, W / 2, top + 32);
+      }
     }
     ctx.lineWidth = 1;
     this.texture.needsUpdate = true;

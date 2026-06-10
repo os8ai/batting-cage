@@ -57,3 +57,13 @@ export function medalsImplied(medal: Medal): Medal[] {
 export function clubsEntered(bestCarryFt: number, priorClubs: readonly number[]): number[] {
   return DISTANCE_CLUBS_FT.filter((ft) => bestCarryFt >= ft && !priorClubs.includes(ft));
 }
+
+/**
+ * The §8 locked-button stencil, one sentence: "BRONZE AT 50 UNLOCKS 60".
+ * Null for 40 mph (never locked).
+ */
+export function requirementStencil(tier: TierMph): string | null {
+  const i = TIERS.indexOf(tier);
+  if (i <= 0) return null;
+  return `BRONZE AT ${TIERS[i - 1]} UNLOCKS ${tier}`;
+}

@@ -317,6 +317,11 @@ export class AudioEngine {
     if (this.unlocked && this.bufs.click) this.panelAnchor.play(this.bufs.click, 0.7);
   }
 
+  /** Locked-pick refusal: the same click, dropped a fourth and damped (§UX). */
+  refuseClick(): void {
+    if (this.unlocked && this.bufs.click) this.panelAnchor.play(this.bufs.click, 0.5, 0.62);
+  }
+
   /**
    * Per-render-frame: follow the rendered ball and bend the whoosh's
    * playbackRate with the radial velocity toward the listener — manual

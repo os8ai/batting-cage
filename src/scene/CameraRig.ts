@@ -16,9 +16,17 @@ const BASE_FOV = 54; // widened from the spec's 50 so the loaded bat stays in fr
 export class CameraRig {
   readonly camera: THREE.PerspectiveCamera;
   station: StationName = 'PLAY';
+  /** Attract mode (M3 design note 6): slow dolly drift between two poses. */
+  attract = false;
 
   private playBase = new THREE.Vector3();
   private playLook = new THREE.Vector3(0, RELEASE_HEIGHT_M, RELEASE_DIST_M);
+  // Attract poses: a low wide view from the door side and a higher plate-side
+  // view, both looking down the lane at the idling machine.
+  private attractA = new THREE.Vector3(-1.9, 1.7, -0.6);
+  private attractB = new THREE.Vector3(1.8, 2.3, 1.6);
+  private attractLook = new THREE.Vector3(0, 1.1, RELEASE_DIST_M * 0.8);
+  private attractPos = new THREE.Vector3();
 
   private fromPos = new THREE.Vector3();
   private fromLook = new THREE.Vector3();
@@ -55,8 +63,32 @@ export class CameraRig {
     this.playBase.set(batterX + towardPlate, 5.9 * FT_TO_M, -1.05);
   }
 
+  /** Enter the attract drift (idle visit, §Flow 2); any station move exits. */
+  startAttract(): void {
+    if (this.attract) return;
+    this.attract = true;
+    this.fromPos.copy(this.camera.position);
+    this.fromLook.copy(this.look);
+    this.moveT = 0;
+  }
+
   /** 0.8 s eased dolly to a station (null station = the OTS play camera). */
   goTo(name: StationName, station: Station): void {
+    if (this.attract) {
+      this.attract = false;
+      this.station = name;
+      this.fromPos.copy(this.camera.position);
+      this.fromLook.copy(this.look);
+      if (name === 'PLAY') {
+        this.toPos.copy(this.playBase);
+        this.toLook.copy(this.playLook);
+      } else {
+        this.toPos.copy(station.pos);
+        this.toLook.copy(station.lookAt);
+      }
+      this.moveT = 0;
+      return;
+    }
     if (name === this.station && this.moveT >= 1) return;
     this.station = name;
     this.fromPos.copy(this.camera.position);
@@ -95,10 +127,15 @@ export class CameraRig {
     }
     const e = this.moveT < 1 ? this.moveT * this.moveT * (3 - 2 * this.moveT) : 1;
 
-    // Live target (PLAY sways; stations are static).
+    // Live target (PLAY sways; stations are static; attract drifts).
     let targetPos: THREE.Vector3;
     let targetLook: THREE.Vector3;
-    if (this.station === 'PLAY') {
+    if (this.attract) {
+      // 0.05 Hz drift between the two attract poses (design note 6).
+      const u = 0.5 + 0.5 * Math.sin(2 * Math.PI * 0.05 * timeS);
+      targetPos = this.attractPos.lerpVectors(this.attractA, this.attractB, u);
+      targetLook = this.attractLook;
+    } else if (this.station === 'PLAY') {
       const sway = Math.sin(2 * Math.PI * 0.1 * timeS) * 0.012;
       const bob = Math.cos(2 * Math.PI * 0.08 * timeS) * 0.008;
       targetPos = this.scratch.set(this.playBase.x + sway, this.playBase.y + bob, this.playBase.z);

@@ -1,11 +1,11 @@
 /**
  * Non-gameplay bindings (§Inputs — UI affordances, permitted by fence 1):
- * arrows = station/panel focus · ENTER mirrors SPACE for confirms · TAB =
- * stats monitor · ESC = back to play (the system sheet is M3) · M = mute ·
- * H/B = handedness/bat accelerators · F3 = diagnostics.
+ * arrows = station/panel focus and initials entry · ENTER mirrors SPACE for
+ * confirms · TAB = stats monitor (+ page cycle) · ESC = pause + system sheet
+ * · M = mute · H/B = handedness/bat accelerators · F3 = diagnostics.
  *
- * M0-DEBUG retired in M1: digit tier keys are GONE (the diegetic machine
- * panel replaces them, §UX). R-token remains until M3's token slot station.
+ * M0-DEBUG fully retired (M3): the R-token key is GONE — SPACE at the token
+ * slot inserts (§UX station c); digit tier keys went with M1's panel.
  */
 export interface UiKeyHandlers {
   onArrow: (dir: 'up' | 'down' | 'left' | 'right') => void;
@@ -15,7 +15,6 @@ export interface UiKeyHandlers {
   onMute: () => void;
   onHandedness: () => void;
   onBat: () => void;
-  onToken: () => void; // M0-DEBUG (the token slot station arrives in M3)
   onToggleDiagnostics: () => void;
 }
 
@@ -58,9 +57,6 @@ export function attachUiKeys(h: UiKeyHandlers): () => void {
         break;
       case 'KeyB':
         h.onBat();
-        break;
-      case 'KeyR':
-        h.onToken();
         break;
       default:
         break;

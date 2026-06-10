@@ -214,3 +214,12 @@ describe('sim career gating & ceremonies', () => {
     expect(events.some((e) => e.type === 'NEW_PB' || e.type === 'MEDAL_EARNED')).toBe(false);
   });
 });
+
+describe('locked-button stencil (§8)', () => {
+  it('spells the one-sentence requirement; 40 is never locked', async () => {
+    const { requirementStencil } = await import('../src/core/rules/progression');
+    expect(requirementStencil(40)).toBeNull();
+    expect(requirementStencil(50)).toBe('BRONZE AT 40 UNLOCKS 50');
+    expect(requirementStencil(90)).toBe('BRONZE AT 80 UNLOCKS 90');
+  });
+});

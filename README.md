@@ -30,7 +30,7 @@ boards with initials, and a full stat locker live on the cage-side monitor.
 | Key | Action |
 |---|---|
 | SPACE | swing · insert token · confirm |
-| ARROWS | machine panel · initials entry |
+| ARROWS | ←→ machine panel · ↑↓ camera zoom · initials entry |
 | ENTER | confirm · insert token (never swings) |
 | TAB | stats monitor · next page |
 | H / B | handedness · wood/metal bat |

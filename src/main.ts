@@ -297,10 +297,19 @@ function handleBoardSignals(signals: BoardSignal[]): void {
 
 attachUiKeys({
   onArrow: (dir) => {
+    if (modes.mode === 'ESC') return; // the sheet owns the keys while open
+    const wakes = rig.attract;
     noteInput();
+    if (wakes) return; // a press that wakes the attract drift only wakes
     if (modes.mode === 'INITIALS') {
       handleBoardSignals(cage.board.initialsInput(dir, sim.t));
       audio.confirmClick();
+      return;
+    }
+    // Play-camera zoom (owner playtest, post-M4): ↑ in / ↓ out at the OTS
+    // view — in-round or idle at the plate. Stations keep arrow navigation.
+    if ((dir === 'up' || dir === 'down') && (!idle() || rig.station === 'PLAY')) {
+      if (rig.zoom(dir === 'up' ? 1 : -1)) audio.confirmClick();
       return;
     }
     if (!idle()) return;

@@ -12,6 +12,12 @@ import type { Station, StationName } from './CageScene';
  */
 const MOVE_S = 0.8;
 const BASE_FOV = 54; // widened from the spec's 50 so the loaded bat stays in frame
+// Play-view zoom (post-M4 owner playtest): on the pitch line the batter sits
+// farther off-axis, so the default opens to 58° to keep the bat in frame;
+// ↑/↓ adjust between the stops.
+const PLAY_FOV_DEFAULT = 58;
+const PLAY_FOV_MIN = 46;
+const PLAY_FOV_MAX = 70;
 
 export class CameraRig {
   readonly camera: THREE.PerspectiveCamera;
@@ -40,6 +46,7 @@ export class CameraRig {
   private shakeDur = 0;
   private shakeAmp = 0;
   private kickLeft = 0;
+  private playFov = PLAY_FOV_DEFAULT;
 
   private scratch = new THREE.Vector3();
 
@@ -113,6 +120,18 @@ export class CameraRig {
     return this.moveT >= 1;
   }
 
+  /**
+   * Play-camera zoom (owner playtest, post-M4): ↑ zooms in, ↓ zooms out, in
+   * 4° FOV steps. Applies only to the OTS play view — stations keep their
+   * framing. Returns false at the stops (caller skips the confirm click).
+   */
+  zoom(dir: 1 | -1): boolean {
+    const next = Math.max(PLAY_FOV_MIN, Math.min(PLAY_FOV_MAX, this.playFov - dir * 4));
+    if (next === this.playFov) return false;
+    this.playFov = next;
+    return true;
+  }
+
   /** §4 contact feel — driven by the CONTACT event. */
   onContact(evMph: number, grade: Grade): void {
     const k = Math.max(0, Math.min(1, (evMph - 60) / 45));
@@ -164,13 +183,14 @@ export class CameraRig {
       this.camera.position.y += Math.sin(timeS * 171.7 + 1.3) * a * 0.7;
     }
 
-    // PERFECT FOV kick: fast out, smooth return (§4: 4°).
-    let fov = BASE_FOV;
+    // PERFECT FOV kick: fast out, smooth return (§4: 4°). The play view uses
+    // the player's zoom; stations keep the base framing.
+    let fov = this.station === 'PLAY' && !this.attract ? this.playFov : BASE_FOV;
     if (this.kickLeft > 0) {
       this.kickLeft = Math.max(0, this.kickLeft - dt);
       const p = 1 - this.kickLeft / 0.36;
       const env = p < 0.25 ? p / 0.25 : 1 - (p - 0.25) / 0.75;
-      fov = BASE_FOV + 4 * env;
+      fov += 4 * env;
     }
     if (this.camera.fov !== fov) {
       this.camera.fov = fov;

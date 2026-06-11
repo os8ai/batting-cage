@@ -160,18 +160,25 @@ console copy-out). Triple fence holds lil-gui out of dist/: statically-false
    dist/"); a tuning session in the shipped artifact is impossible, which
    is the point.
 
-## Owner steps (open, explicit — none are v1 build blockers)
+## Owner steps
 
-- (a) **Playtest sessions for §14.22–.24 human sign-off**: session-1 flow at
-  40–50 and a practiced ladder session; watch bronze pacing, re-token pull,
-  GOOD-contact feel. The oracle's σ anchors vs observed ε distributions
-  (the save's swing log records them for free) belong here when done.
-- (b) **Create the GitHub repo / enable Pages (Source: Actions), push, tag
-  `v1.0`** — CI is committed and inert until a remote exists.
-- (c) **Post-publish re-runs against the public URL**:
-  `BC_URL=<url> node tests/acceptance/throttledLoad.mjs` and
-  `BC_URL=<url> node tests/acceptance/networkAudit.mjs` (§14.15/.20 close
-  fully only there).
+- (a) **OPEN — playtest sessions for §14.22–.24 human sign-off**: session-1
+  flow at 40–50 and a practiced ladder session; watch bronze pacing,
+  re-token pull, GOOD-contact feel. The oracle's σ anchors vs observed ε
+  distributions (the save's swing log records them for free) belong here.
+  First post-ship session already yielded four fixes (ENTER token, room
+  tone, pitch-line camera, ↑/↓ zoom — commits after `m4`).
+- (b) **DONE 2026-06-10** — published: repo `os8ai/batting-cage`, Pages
+  enabled (Source: Actions; the auto-created `github-pages` environment
+  needed a `v*` tag deployment policy added — default only allows `main`),
+  `v1.0` deployed by the committed workflow. Live at
+  **https://os8ai.github.io/batting-cage/**. One CI-only fix en route: the
+  oracle simulation tests needed explicit 180 s timeouts (2-core runner vs
+  the 20-core dev box).
+- (c) **DONE 2026-06-10** — §14.15/.20 closed against the public URL:
+  `BC_URL=https://os8ai.github.io/batting-cage` → throttledLoad interactive
+  **0.9 s** / first pitch **14.7 s** (budgets 10/60); networkAudit
+  **2 requests, 0 third-party, 0 after load**.
 - (d) Content swaps (Mixamo rig, DSEG atlas) — optional post-v1 content
   changes; the procedural set is the shipped design (M1-NOTES).
 

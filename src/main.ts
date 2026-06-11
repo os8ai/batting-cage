@@ -7,7 +7,7 @@ import { AudioEngine } from './audio/AudioEngine';
 import { createCueContext, cuesForBoardSignal, cuesForEvent } from './audio/cueMap';
 import { TIERS } from './core/constants';
 import { CageSim } from './core/sim';
-import { ModeStack, routeSpace } from './input/modes';
+import { ModeStack, routeEnter, routeSpace } from './input/modes';
 import { attachPointer } from './input/pointer';
 import { attachSwingInput } from './input/swing';
 import { attachUiKeys } from './input/uiKeys';
@@ -317,11 +317,31 @@ attachUiKeys({
   },
   onEnter: () => {
     noteInput();
-    if (modes.mode === 'INITIALS') {
-      handleBoardSignals(cage.board.initialsInput('confirm', sim.t));
-      return;
+    // ENTER mirrors SPACE's non-gameplay role (§Inputs) — including the
+    // token insert, so "select the speed, hit ENTER" starts the round. It
+    // never swings (routeEnter maps SWING → NONE; fence 1).
+    const action = routeEnter({
+      mode: modes.mode,
+      paused: loop.paused,
+      inRound: sim.inRound,
+      station: rig.attract ? 'PLAY' : rig.station,
+      panelFocusTier: cage.panel.focusedTier,
+      selectedTier: sim.currentTier,
+    });
+    switch (action) {
+      case 'PANEL_CONFIRM':
+        confirmPanel();
+        break;
+      case 'TOKEN':
+        sim.insertToken();
+        break;
+      case 'INITIALS_CONFIRM':
+        handleBoardSignals(cage.board.initialsInput('confirm', sim.t));
+        break;
+      case 'NONE':
+      case 'SWING': // unreachable from routeEnter
+        break;
     }
-    if (idle() && rig.station === 'PANEL') confirmPanel();
   },
   onTab: () => {
     noteInput();

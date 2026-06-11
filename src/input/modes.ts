@@ -56,3 +56,15 @@ export function routeSpace(c: SpaceContext): SpaceAction {
   if (c.station === 'PANEL' && c.panelFocusTier !== c.selectedTier) return 'PANEL_CONFIRM';
   return 'TOKEN';
 }
+
+/**
+ * Where an ENTER keydown goes (owner playtest, post-M4): exactly SPACE's
+ * non-gameplay role — confirm an unconfirmed panel focus, confirm initials,
+ * otherwise insert the token ("select the speed, hit ENTER" reads naturally).
+ * The one hard difference: ENTER NEVER swings — SPACE stays the sole
+ * gameplay input (fence 1), so mid-round ENTER is a no-op.
+ */
+export function routeEnter(c: SpaceContext): SpaceAction {
+  const action = routeSpace(c);
+  return action === 'SWING' ? 'NONE' : action;
+}

@@ -20,7 +20,7 @@ export interface EscSheetHandlers {
 const KEY_REF: Array<[string, string]> = [
   ['SPACE', 'swing · insert token · confirm'],
   ['ARROWS', 'machine panel · initials'],
-  ['ENTER', 'confirm'],
+  ['ENTER', 'confirm · insert token'],
   ['TAB', 'stats monitor · next page'],
   ['H / B', 'handedness · bat'],
   ['M', 'mute'],

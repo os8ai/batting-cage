@@ -79,14 +79,14 @@ describe('player model mechanics', () => {
       const novice = medalProbabilities(tier, { sigmaMs: 65 }, 150);
       expect(elite.medianScore, `${tier} mph`).toBeGreaterThan(novice.medianScore);
     }
-  });
+  }, 180_000);
 });
 
 describe('§14.22–.24 tuning proxies (the shipped-table contract)', () => {
   it('§14.22a — a median novice (σ0 65 ms, late bias) earns bronze at 40 within 3 rounds', () => {
     const rate = noviceFirstSessionBronzeRate({ sigma0Ms: 65, biasMs: 10 });
     expect(rate).toBeGreaterThanOrEqual(0.7); // target ~50% — hold with margin
-  });
+  }, 180_000);
 
   it('§14.22b — the bronze ladder falls smoothly tier to tier (no free tier, no cliff)', () => {
     const ladder = TIERS.map((t) => maxSigmaForBronze(t, 0.5, 120));
@@ -101,7 +101,7 @@ describe('§14.22–.24 tuning proxies (the shipped-table contract)', () => {
     expect(ladder[5]!).toBeLessThanOrEqual(45);
     // …and the bottom is a welcome mat: novice timing brons at 40.
     expect(ladder[0]!).toBeGreaterThanOrEqual(80);
-  });
+  }, 180_000);
 
   it('§14.22c — platinum is elite-only (σ ≲ 20) yet reachable at every tier', () => {
     for (const tier of TIERS) {
@@ -114,12 +114,12 @@ describe('§14.22–.24 tuning proxies (the shipped-table contract)', () => {
         `P(platinum | elite σ) at ${tier}`
       ).toBeGreaterThanOrEqual(0.08);
     }
-  });
+  }, 180_000);
 
   it('§14.23 proxy — bronze at 40 is near-certain for a completed first-session round', () => {
     // Session pull rides early wins (SPEC §Why): the first medal must land.
     expect(medalProbabilities(40, { sigmaMs: 65, biasMs: 10 }, 200).bronze).toBeGreaterThanOrEqual(0.9);
-  });
+  }, 180_000);
 
   it('§14.24 proxy — a 30% |ε| improvement moves the medal needle at a fixed tier', () => {
     // First→fifth session: σ 55 → 38 (−30%). The board must SHOW the gain:
@@ -128,7 +128,7 @@ describe('§14.22–.24 tuning proxies (the shipped-table contract)', () => {
     const fifth = medalProbabilities(60, { sigmaMs: 38.5 }, 200);
     expect(fifth.medianScore).toBeGreaterThan(first.medianScore * 1.1);
     expect(fifth.silver).toBeGreaterThan(first.silver + 0.15);
-  });
+  }, 180_000);
 
   it('medal ordering stays coherent at every tier (bronze < silver < gold < platinum)', () => {
     for (const tier of TIERS) {

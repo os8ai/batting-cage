@@ -50,13 +50,15 @@ export class CameraRig {
   }
 
   setHandedness(h: Handedness): void {
-    // Owner-playtest fix (M1): the camera sits PLATE-side of the batter —
-    // over his lead shoulder, nearly on the pitch line — so the ball flies
-    // essentially at the lens and the batter frames left (righty). The
-    // spec's "2 ft outside the back shoulder" read put the batter mid-frame
-    // and the pitch line off-axis.
+    // Owner-playtest fix (M1, refined post-M4): the camera sits EXACTLY on
+    // the pitch line (x = 0) — the M1 read left it 0.40 m off-line, and the
+    // lateral parallax made the dead-center pitch visibly drift right of
+    // the lane stripe on its way down (owner playtest). On-line, ball,
+    // stripe, and release light are collinear on screen and the ball flies
+    // straight at the lens (§4); the batter frames to the side (mirrored
+    // for lefties).
     const batterX = h === 'R' ? 0.85 : -0.85;
-    const towardPlate = h === 'R' ? -0.45 : 0.45;
+    const towardPlate = -batterX; // back to the centerline
     // z = −1.05 m (≈3.8 ft behind the batter, not the spec's 4.5): on the
     // pitch line the §4 distance lands the camera inside the backstop pad
     // (8 ft wide, 4 ft behind the plate) — pulled forward to clear it.

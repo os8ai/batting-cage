@@ -373,26 +373,50 @@ export function boardTick(ctx: AudioContext): AudioBuffer {
 }
 
 /** Room tone — HVAC hum + distant facility air; the Ambience bed (§10,
- * "no music anywhere"). Loop-safe. */
+ * "no music anywhere"). Loop-safe.
+ *
+ * Owner playtest (post-M4): the original bed — 70 SPARSE sine partials
+ * spread to 900 Hz — read as an eerie inharmonic drone, not air. Air is
+ * dense noise: 700 loop-fitting partials packed below ~380 Hz approximate
+ * periodic low-passed noise (rumble, not chord), under a softer 60/120 Hz
+ * mains hum, with a one-cycle-per-loop breath so the air moves. */
 export function roomTone(ctx: AudioContext): AudioBuffer {
-  const dur = 2.0;
+  const dur = 4.0;
   const { buf, data, sr } = buffer(ctx, dur);
   const fit = (f: number) => Math.round(f * dur) / dur;
-  // 60 Hz electrical hum family, very quiet.
+
+  // Air-handler rumble: white noise low-passed twice at ~220 Hz (12 dB/oct
+  // — rumble, no hiss, no resolvable tones). Generated one crossfade-window
+  // longer than the loop, then the head is overlap-faded from the tail's
+  // continuation so the wrap step is an ordinary noise step (click-free).
+  const X = Math.floor(0.25 * sr);
+  const long = new Float32Array(data.length + X);
+  const noise = lcg(0x4a1c);
+  for (let i = 0; i < long.length; i++) long[i] = noise();
+  onePoleLP(long, sr, 220);
+  onePoleLP(long, sr, 220);
+  for (let i = 0; i < data.length; i++) data[i] = long[i]!;
+  for (let i = 0; i < X; i++) {
+    const a = i / X;
+    data[i] = long[i]! * a + long[data.length + i]! * (1 - a);
+  }
+
+  // One slow breath per loop (loop-safe by construction), ±12% on the air.
+  for (let i = 0; i < data.length; i++) {
+    data[i]! *= 1 + 0.12 * Math.sin((2 * Math.PI * i) / data.length);
+  }
+
+  // Mains hum under it, quieter and without the spooky 180 Hz overtone.
+  normalize(data, 0.3);
   const hums: Array<[number, number]> = [
-    [fit(60), 0.5],
-    [fit(120), 0.22],
-    [fit(180), 0.1],
+    [fit(60), 0.1],
+    [fit(120), 0.035],
   ];
   for (let i = 0; i < data.length; i++) {
     const t = i / sr;
-    let v = 0;
-    for (const [f, a] of hums) v += a * Math.sin(2 * Math.PI * f * t);
-    data[i] = v;
+    for (const [f, a] of hums) data[i]! += a * Math.sin(2 * Math.PI * f * t);
   }
-  // Air-handler noise floor above the hum.
-  partialBed(data, sr, dur, 0x4a1c, 70, 90, 900, (f) => 9 / (f + 90));
-  normalize(data, 0.35);
+  normalize(data, 0.3);
   return buf;
 }
 

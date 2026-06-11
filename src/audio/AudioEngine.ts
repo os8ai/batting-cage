@@ -227,7 +227,7 @@ export class AudioEngine {
     // The Ambience bed runs for the whole visit (§10 room tone).
     this.room.setBuffer(this.bufs.room);
     this.room.setLoop(true);
-    this.room.setVolume(0.16);
+    this.room.setVolume(0.12); // owner playtest: the bed should be felt, not heard
     this.room.play();
   }
 
